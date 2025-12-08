@@ -91,3 +91,6 @@ npm test
 - A frase de recuperação é determinística e permite restaurar o Totem
 
 
+
+
+

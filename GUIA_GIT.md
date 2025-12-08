@@ -86,3 +86,6 @@ cd "C:\Users\Dell\Dropbox\! 000 ByPass\Pessoal\Familia\Plano B\!00_APP\!99_CLÃ"
    ```
 
 
+
+
+
