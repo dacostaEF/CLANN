@@ -47,3 +47,4 @@ git status --short | Where-Object { $_ -notmatch "^\?\?" }
 Write-Host "`n✓ Configuração concluída!" -ForegroundColor Green
 Write-Host "Execute: git commit -m 'Sprint 1: TOTEM + Onboarding'" -ForegroundColor Yellow
 
+

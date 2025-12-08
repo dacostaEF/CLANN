@@ -45,3 +45,4 @@ export function validateMnemonic(mnemonic) {
   return bip39.validateMnemonic(mnemonic);
 }
 
+

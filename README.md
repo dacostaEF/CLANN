@@ -90,3 +90,4 @@ npm test
 - Nenhum dado do Totem sai do dispositivo
 - A frase de recuperação é determinística e permite restaurar o Totem
 
+

@@ -9,3 +9,4 @@ Este diretório deve conter os seguintes arquivos de assets:
 
 Estes arquivos são referenciados no `app.json` e são necessários para o build do app.
 
+
