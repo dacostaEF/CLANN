@@ -30,16 +30,19 @@ export function SecurityProvider({ children }) {
     try {
       setLoading(true);
       
-      const [hasPin, biometryEnabled, biometryAvail, remainingAttempts, lockRemaining, failedAttempts] = await Promise.all([
-        hasPin(),
-        isBiometryEnabled(),
-        isBiometryAvailable(),
-        getRemainingAttempts(),
-        getLockRemainingTime(),
-        getFailedAttempts(),
+      // Importa a função hasPin dinamicamente para evitar problemas no web
+      const { hasPin: hasPinFn } = await import('../security/PinManager');
+      
+      const [hasPinValue, biometryEnabled, biometryAvail, remainingAttempts, lockRemaining, failedAttempts] = await Promise.all([
+        hasPinFn().catch(() => false),
+        isBiometryEnabled().catch(() => false),
+        isBiometryAvailable().catch(() => false),
+        getRemainingAttempts().catch(() => 5),
+        getLockRemainingTime().catch(() => 0),
+        getFailedAttempts().catch(() => 0),
       ]);
 
-      setHasPinConfigured(hasPin);
+      setHasPinConfigured(hasPinValue);
       setBiometryEnabled(biometryEnabled);
       setBiometryAvailable(biometryAvail);
       setPinRemainingAttempts(remainingAttempts);
@@ -47,6 +50,13 @@ export function SecurityProvider({ children }) {
       setSelfDestructAttempts(failedAttempts);
     } catch (error) {
       console.error('Erro ao carregar estado de segurança:', error);
+      // Define valores padrão em caso de erro
+      setHasPinConfigured(false);
+      setBiometryEnabled(false);
+      setBiometryAvailable(false);
+      setPinRemainingAttempts(5);
+      setPinLockRemaining(0);
+      setSelfDestructAttempts(0);
     } finally {
       setLoading(false);
     }
@@ -56,13 +66,18 @@ export function SecurityProvider({ children }) {
    * Atualiza o estado de PIN
    */
   const updatePinState = async () => {
-    const hasPinValue = await hasPin();
-    setHasPinConfigured(hasPinValue);
-    if (hasPinValue) {
-      const remaining = await getRemainingAttempts();
-      const lockRemaining = await getLockRemainingTime();
-      setPinRemainingAttempts(remaining);
-      setPinLockRemaining(lockRemaining);
+    try {
+      const { hasPin: hasPinFn } = await import('../security/PinManager');
+      const hasPinValue = await hasPinFn().catch(() => false);
+      setHasPinConfigured(hasPinValue);
+      if (hasPinValue) {
+        const remaining = await getRemainingAttempts().catch(() => 5);
+        const lockRemaining = await getLockRemainingTime().catch(() => 0);
+        setPinRemainingAttempts(remaining);
+        setPinLockRemaining(lockRemaining);
+      }
+    } catch (error) {
+      console.error('Erro ao atualizar estado de PIN:', error);
     }
   };
 
