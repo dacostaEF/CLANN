@@ -141,3 +141,29 @@ export function verifySignature(message, signatureHex, publicKeyHex) {
   }
 }
 
+/**
+ * Valida a integridade criptográfica de um Totem
+ * Verifica se a chave pública deriva corretamente da chave privada
+ * @param {Object} totem - Objeto Totem a validar
+ * @returns {boolean} True se o Totem é válido
+ */
+export function validateTotem(totem) {
+  try {
+    const { privateKey, publicKey } = totem;
+    
+    if (!privateKey || !publicKey) {
+      return false;
+    }
+    
+    // Deriva a chave pública a partir da chave privada
+    const privateKeyBuffer = Buffer.from(privateKey, 'hex');
+    const derivedPublicKey = secp256k1.getPublicKey(privateKeyBuffer, true);
+    const derivedPublicKeyHex = Buffer.from(derivedPublicKey).toString('hex');
+    
+    // Compara com a chave pública armazenada
+    return derivedPublicKeyHex === publicKey;
+  } catch (error) {
+    return false;
+  }
+}
+

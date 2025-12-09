@@ -48,6 +48,7 @@ export default function TotemGenerationScreen({ navigation }) {
   };
 
   const handleContinue = () => {
+    // Navega para tela de frase de recuperação
     navigation.navigate('RecoveryPhrase', { recoveryPhrase: totem.recoveryPhrase });
   };
 

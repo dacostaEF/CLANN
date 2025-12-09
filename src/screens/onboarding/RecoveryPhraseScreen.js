@@ -72,7 +72,8 @@ export default function RecoveryPhraseScreen({ route, navigation }) {
       return;
     }
 
-    navigation.navigate('ChooseStart');
+    // Navega para verificação completa da seed (Sprint 2)
+    navigation.navigate('VerifySeed', { recoveryPhrase });
   };
 
   return (

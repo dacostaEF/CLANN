@@ -19,32 +19,53 @@ import TotemGenerationScreen from './src/screens/onboarding/TotemGenerationScree
 import RecoveryPhraseScreen from './src/screens/onboarding/RecoveryPhraseScreen';
 import ChooseStartScreen from './src/screens/onboarding/ChooseStartScreen';
 
-// Tela Home (temporária, vazia)
+// Telas de segurança (Sprint 2)
+import VerifySeedScreen from './src/screens/VerifySeedScreen';
+import CreatePinScreen from './src/screens/CreatePinScreen';
+import EnterPinScreen from './src/screens/EnterPinScreen';
+import ExportIdentityScreen from './src/screens/ExportIdentityScreen';
+import ImportIdentityScreen from './src/screens/ImportIdentityScreen';
+import SecurityAuditScreen from './src/screens/SecurityAuditScreen';
+
+// Tela Home
 import HomeScreen from './src/screens/HomeScreen';
 
-// Storage
+// Storage e Security
 import { hasTotemSecure } from './src/storage/secureStore';
+import { hasPin } from './src/security/PinManager';
 
 const Stack = createNativeStackNavigator();
 
 export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [hasTotem, setHasTotem] = useState(false);
+  const [hasPinConfigured, setHasPinConfigured] = useState(false);
+  const [pinVerified, setPinVerified] = useState(false);
 
   useEffect(() => {
-    checkTotem();
+    checkInitialState();
   }, []);
 
-  const checkTotem = async () => {
+  const checkInitialState = async () => {
     try {
-      const exists = await hasTotemSecure();
-      setHasTotem(exists);
+      const totemExists = await hasTotemSecure();
+      setHasTotem(totemExists);
+      
+      if (totemExists) {
+        const pinExists = await hasPin();
+        setHasPinConfigured(pinExists);
+        setPinVerified(!pinExists); // Se não tem PIN, não precisa verificar
+      }
     } catch (error) {
-      console.error('Erro ao verificar Totem:', error);
+      console.error('Erro ao verificar estado inicial:', error);
       setHasTotem(false);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handlePinSuccess = () => {
+    setPinVerified(true);
   };
 
   if (isLoading) {
@@ -64,17 +85,32 @@ export default function App() {
           contentStyle: { backgroundColor: '#000000' },
         }}
       >
-        {hasTotem ? (
-          // Se já tem Totem, vai direto para Home
-          <Stack.Screen name="Home" component={HomeScreen} />
+        {hasTotem && hasPinConfigured && !pinVerified ? (
+          // Se tem Totem e PIN, precisa autenticar
+          <Stack.Screen name="EnterPin">
+            {(props) => <EnterPinScreen {...props} onSuccess={handlePinSuccess} />}
+          </Stack.Screen>
+        ) : hasTotem ? (
+          // Se tem Totem (com ou sem PIN), vai para Home
+          <>
+            <Stack.Screen name="Home" component={HomeScreen} />
+            <Stack.Screen name="ExportIdentity" component={ExportIdentityScreen} />
+            <Stack.Screen name="ImportIdentity" component={ImportIdentityScreen} />
+            <Stack.Screen name="SecurityAudit" component={SecurityAuditScreen} />
+          </>
         ) : (
           // Se não tem Totem, mostra onboarding
           <>
             <Stack.Screen name="Welcome" component={WelcomeScreen} />
             <Stack.Screen name="TotemGeneration" component={TotemGenerationScreen} />
             <Stack.Screen name="RecoveryPhrase" component={RecoveryPhraseScreen} />
+            <Stack.Screen name="VerifySeed" component={VerifySeedScreen} />
+            <Stack.Screen name="CreatePin" component={CreatePinScreen} />
             <Stack.Screen name="ChooseStart" component={ChooseStartScreen} />
             <Stack.Screen name="Home" component={HomeScreen} />
+            <Stack.Screen name="ExportIdentity" component={ExportIdentityScreen} />
+            <Stack.Screen name="ImportIdentity" component={ImportIdentityScreen} />
+            <Stack.Screen name="SecurityAudit" component={SecurityAuditScreen} />
           </>
         )}
       </Stack.Navigator>
