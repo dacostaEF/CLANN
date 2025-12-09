@@ -6,7 +6,7 @@
 
 import { Platform } from 'react-native';
 import { sha256 } from '@noble/hashes/sha256';
-import { randomBytes } from '@noble/secp256k1';
+import { randomBytes } from '../utils/randomBytes';
 
 // Polyfill para web usando localStorage
 let SecureStore;

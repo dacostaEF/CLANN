@@ -30,14 +30,19 @@ export default function TotemGenerationScreen({ navigation }) {
   const generateTotemData = async () => {
     try {
       setLoading(true);
+      console.log('Gerando Totem...');
       const newTotem = generateTotem();
+      console.log('Totem gerado:', newTotem);
       setTotem(newTotem);
       
       // Salva o Totem de forma segura
+      console.log('Salvando Totem...');
       await saveTotemSecure(newTotem);
+      console.log('Totem salvo com sucesso');
       setLoading(false);
     } catch (error) {
-      Alert.alert('Erro', 'Não foi possível gerar o Totem. Tente novamente.');
+      console.error('Erro ao gerar Totem:', error);
+      Alert.alert('Erro', `Não foi possível gerar o Totem: ${error.message}`);
       setLoading(false);
     }
   };

@@ -3,8 +3,7 @@
  * Sistema de identidade local baseado em chaves secp256k1
  */
 
-import { secp256k1 } from '@noble/secp256k1';
-import { randomBytes } from '@noble/secp256k1';
+import { getPublicKey, sign, verify } from '@noble/secp256k1';
 import { sha256 } from '@noble/hashes/sha256';
 import { generateSeed, seedToMnemonic, mnemonicToSeed, validateMnemonic } from './seed.js';
 
@@ -52,7 +51,7 @@ export function generateTotem() {
   const privateKey = new Uint8Array(hash);
   
   // Deriva chave pública (33 bytes comprimida)
-  const publicKey = secp256k1.getPublicKey(privateKey, true);
+  const publicKey = getPublicKey(privateKey, true);
   
   // Gera ID do Totem (hash SHA256 da chave pública → 16 caracteres)
   const totemId = generateTotemId(publicKey);
@@ -92,7 +91,7 @@ export function restoreTotem(phrase) {
   const privateKey = new Uint8Array(hash);
   
   // Deriva chave pública
-  const publicKey = secp256k1.getPublicKey(privateKey, true);
+  const publicKey = getPublicKey(privateKey, true);
   
   // Gera ID do Totem
   const totemId = generateTotemId(publicKey);
@@ -118,7 +117,7 @@ export function restoreTotem(phrase) {
 export function signMessage(message, privateKeyHex) {
   const privateKey = Buffer.from(privateKeyHex, 'hex');
   const messageHash = sha256(new TextEncoder().encode(message));
-  const signature = secp256k1.sign(messageHash, privateKey);
+  const signature = sign(messageHash, privateKey);
   return Buffer.from(signature.toCompactRawBytes()).toString('hex');
 }
 
@@ -135,7 +134,7 @@ export function verifySignature(message, signatureHex, publicKeyHex) {
     const signature = Buffer.from(signatureHex, 'hex');
     const messageHash = sha256(new TextEncoder().encode(message));
     
-    return secp256k1.verify(signature, messageHash, publicKey);
+    return verify(signature, messageHash, publicKey);
   } catch (error) {
     return false;
   }
@@ -157,7 +156,7 @@ export function validateTotem(totem) {
     
     // Deriva a chave pública a partir da chave privada
     const privateKeyBuffer = Buffer.from(privateKey, 'hex');
-    const derivedPublicKey = secp256k1.getPublicKey(privateKeyBuffer, true);
+    const derivedPublicKey = getPublicKey(privateKeyBuffer, true);
     const derivedPublicKeyHex = Buffer.from(derivedPublicKey).toString('hex');
     
     // Compara com a chave pública armazenada

@@ -4,7 +4,7 @@
  */
 
 import * as bip39 from 'bip39';
-import { randomBytes } from '@noble/secp256k1';
+import { randomBytes } from '../utils/randomBytes';
 
 /**
  * Gera uma seed aleatória de 128 bits (16 bytes)

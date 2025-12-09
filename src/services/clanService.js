@@ -5,8 +5,8 @@
  * NÃO implementa chat, tribunal, votação ou níveis.
  */
 
-import { randomBytes } from '@noble/secp256k1';
 import { sha256 } from '@noble/hashes/sha256';
+import { randomBytes } from '../utils/randomBytes';
 
 /**
  * Gera um ID único para o CLANN
