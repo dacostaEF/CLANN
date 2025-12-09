@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import QRScannerModal from '../components/QRScannerModal';
 import ClanManager from '../clans/ClanManager';
+import { getCurrentTotemId } from '../crypto/totemStorage';
 
 export default function JoinClanScreen() {
   const navigation = useNavigation();
@@ -31,7 +32,7 @@ export default function JoinClanScreen() {
     setLoading(true);
     
     try {
-      const totemId = 'TEMP_TOTEM_ID'; 
+      const totemId = await getCurrentTotemId(); 
       
       const clan = await ClanManager.joinClan(code, totemId);
       

@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import ClanCard from '../components/ClanCard';
 import ClanStorage from '../clans/ClanStorage';
+import { getCurrentTotemId } from '../crypto/totemStorage';
 
 export default function ClanListScreen() {
   const navigation = useNavigation();
@@ -23,7 +24,7 @@ export default function ClanListScreen() {
 
   const loadClans = async () => {
     try {
-      const totemId = 'TEMP_TOTEM_ID';
+      const totemId = await getCurrentTotemId();
       
       const userClans = await ClanStorage.getUserClans(totemId);
       setClans(userClans);

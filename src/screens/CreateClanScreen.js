@@ -13,6 +13,7 @@ import { useNavigation } from '@react-navigation/native';
 import ClanIconPicker from '../components/ClanIconPicker';
 import ClanManager from '../clans/ClanManager';
 import { DEFAULT_CLAN_ICONS } from '../config/ClanTypes';
+import { getCurrentTotemId } from '../crypto/totemStorage';
 
 export default function CreateClanScreen() {
   const navigation = useNavigation();
@@ -41,7 +42,7 @@ export default function CreateClanScreen() {
     
     try {
       // TODO: Obter totemId real a partir do TotemContext
-      const creatorTotemId = 'TEMP_TOTEM_ID';
+      const creatorTotemId = await getCurrentTotemId();
       
       const canCreate = await ClanManager.canCreateClan(creatorTotemId);
       if (!canCreate.canCreate) {

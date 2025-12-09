@@ -1,109 +1,91 @@
 import * as SQLite from 'expo-sqlite';
 
-const DB_NAME = 'clann.db';
+class ClanStorage {
+  constructor() {
+    this.db = SQLite.openDatabase('clans.db');
+  }
 
-let db = null;
+  getDB() {
+    return this.db;
+  }
 
-const initDatabase = () => {
-  if (!db) {
-    db = SQLite.openDatabase(DB_NAME);
-    
-    db.transaction(tx => {
-      // Tabela de CLANNs
-      tx.executeSql(
-        `CREATE TABLE IF NOT EXISTS clans (
-          id TEXT PRIMARY KEY,
-          name TEXT NOT NULL,
-          icon TEXT DEFAULT '🛡️',
-          description TEXT,
-          rules TEXT,
-          privacy TEXT DEFAULT 'private',
-          max_members INTEGER DEFAULT 50,
-          created_at TEXT,
-          created_by TEXT,
-          invite_code TEXT UNIQUE,
-          metadata TEXT
-        )`
-      );
-      
-      // Tabela de membros
-      tx.executeSql(
-        `CREATE TABLE IF NOT EXISTS clan_members (
-          clan_id TEXT,
-          totem_id TEXT,
-          joined_at TEXT,
-          role TEXT DEFAULT 'member',
-          FOREIGN KEY (clan_id) REFERENCES clans(id),
-          PRIMARY KEY (clan_id, totem_id)
-        )`
-      );
-      
-      // Índices para performance
-      tx.executeSql('CREATE INDEX IF NOT EXISTS idx_clan_members ON clan_members(clan_id)');
-      tx.executeSql('CREATE INDEX IF NOT EXISTS idx_member_clans ON clan_members(totem_id)');
+  async init() {
+    return new Promise((resolve, reject) => {
+      this.db.transaction(tx => {
+
+        // Tabela principal de CLANNs
+        tx.executeSql(
+          `CREATE TABLE IF NOT EXISTS clans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            icon TEXT NOT NULL,
+            description TEXT,
+            invite_code TEXT UNIQUE NOT NULL,
+            privacy TEXT DEFAULT 'public',
+            created_at TEXT NOT NULL,
+            founder_totem TEXT NOT NULL
+          );`
+        );
+
+        // Membros do CLANN
+        tx.executeSql(
+          `CREATE TABLE IF NOT EXISTS clan_members (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            clan_id INTEGER NOT NULL,
+            totem_id TEXT NOT NULL,
+            role TEXT NOT NULL,
+            joined_at TEXT NOT NULL,
+            FOREIGN KEY (clan_id) REFERENCES clans(id)
+          );`
+        );
+
+        // Atividade do CLANN (para futuros chats e logs)
+        tx.executeSql(
+          `CREATE TABLE IF NOT EXISTS clan_activity (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            clan_id INTEGER NOT NULL,
+            type TEXT NOT NULL,
+            payload TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (clan_id) REFERENCES clans(id)
+          );`
+        );
+
+      },
+      (error) => reject(error),
+      () => resolve(true));
     });
   }
-};
 
-export default class ClanStorage {
-  static getDB() {
-    initDatabase();
-    return db;
-  }
+  // ---------------------------------------------------------
+  // Criar CLANN
+  // ---------------------------------------------------------
+  createClan(data, totemId) {
+    const invite = this._generateInviteCode();
 
-  // Cria um novo CLANN
-  static async createClan(clanData, creatorTotemId) {
     return new Promise((resolve, reject) => {
-      const db = this.getDB();
-      
-      const clanId = `clan_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const inviteCode = this.generateInviteCode();
-      const now = new Date().toISOString();
-      
-      const clan = {
-        id: clanId,
-        name: clanData.name,
-        icon: clanData.icon || '🛡️',
-        description: clanData.description || '',
-        rules: clanData.rules || '',
-        privacy: clanData.privacy || 'private',
-        max_members: clanData.maxMembers || 50,
-        created_at: now,
-        created_by: creatorTotemId,
-        invite_code: inviteCode,
-        metadata: JSON.stringify({
-          version: 1,
-          theme: 'default'
-        })
-      };
-
-      db.transaction(tx => {
-        // Insere o CLANN
+      this.db.transaction(tx => {
         tx.executeSql(
-          `INSERT INTO clans 
-           (id, name, icon, description, rules, privacy, max_members, created_at, created_by, invite_code, metadata)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            clan.id,
-            clan.name,
-            clan.icon,
-            clan.description,
-            clan.rules,
-            clan.privacy,
-            clan.max_members,
-            clan.created_at,
-            clan.created_by,
-            clan.invite_code,
-            clan.metadata
-          ],
+          `INSERT INTO clans (name, icon, description, invite_code, privacy, created_at, founder_totem)
+           VALUES (?, ?, ?, ?, ?, datetime('now'), ?);`,
+          [data.name, data.icon, data.description || null, invite, data.privacy || 'public', totemId],
           (_, result) => {
-            // Adiciona criador como fundador
+            const clanId = result.insertId;
+
+            // Inserir o fundador como membro
             tx.executeSql(
-              `INSERT INTO clan_members (clan_id, totem_id, joined_at, role)
-               VALUES (?, ?, ?, ?)`,
-              [clanId, creatorTotemId, now, 'founder'],
-              () => resolve({ ...clan, members: 1 })
+              `INSERT INTO clan_members (clan_id, totem_id, role, joined_at)
+               VALUES (?, ?, 'founder', datetime('now'));`,
+              [clanId, totemId]
             );
+
+            resolve({
+              id: clanId,
+              name: data.name,
+              icon: data.icon,
+              description: data.description,
+              invite_code: invite
+            });
           },
           (_, error) => reject(error)
         );
@@ -111,221 +93,117 @@ export default class ClanStorage {
     });
   }
 
-  // Entra em um CLANN existente
-  static async joinClan(inviteCode, totemId) {
+  // ---------------------------------------------------------
+  // Entrar no CLANN via invite code
+  // ---------------------------------------------------------
+  joinClan(inviteCode, totemId) {
     return new Promise((resolve, reject) => {
-      const db = this.getDB();
-      
-      db.transaction(tx => {
-        // 1. Encontra o CLANN pelo código
+      this.db.transaction(tx => {
+
         tx.executeSql(
-          `SELECT * FROM clans WHERE invite_code = ?`,
+          `SELECT * FROM clans WHERE invite_code = ? LIMIT 1;`,
           [inviteCode],
           (_, { rows }) => {
-            const clan = rows._array[0];
-            if (!clan) {
-              reject(new Error('CLANN não encontrado'));
+            if (rows.length === 0) {
+              reject(new Error("Código de convite inválido"));
               return;
             }
-            
-            // 2. Verifica se já é membro
+
+            const clan = rows.item(0);
+
             tx.executeSql(
-              `SELECT 1 FROM clan_members WHERE clan_id = ? AND totem_id = ?`,
+              `INSERT INTO clan_members (clan_id, totem_id, role, joined_at)
+               VALUES (?, ?, 'member', datetime('now'));`,
               [clan.id, totemId],
-              (_, { rows: memberRows }) => {
-                if (memberRows._array.length > 0) {
-                  reject(new Error('Você já é membro deste CLANN'));
-                  return;
-                }
-                
-                // 3. Verifica limite de membros
-                tx.executeSql(
-                  `SELECT COUNT(*) as count FROM clan_members WHERE clan_id = ?`,
-                  [clan.id],
-                  (_, { rows: countRows }) => {
-                    const currentMembers = countRows._array[0].count;
-                    if (currentMembers >= clan.max_members) {
-                      reject(new Error('CLANN atingiu o limite de membros'));
-                      return;
-                    }
-                    
-                    // 4. Adiciona como membro
-                    tx.executeSql(
-                      `INSERT INTO clan_members (clan_id, totem_id, joined_at, role)
-                       VALUES (?, ?, ?, ?)`,
-                      [clan.id, totemId, new Date().toISOString(), 'member'],
-                      () => {
-                        // 5. Retorna CLANN atualizado
-                        resolve({
-                          ...clan,
-                          members: currentMembers + 1,
-                          metadata: JSON.parse(clan.metadata || '{}')
-                        });
-                      }
-                    );
-                  }
-                );
-              }
-            );
-          },
-          (_, error) => reject(error)
-        );
-      });
-    });
-  }
-
-  // Lista CLANNs do usuário
-  static async getUserClans(totemId) {
-    return new Promise((resolve, reject) => {
-      const db = this.getDB();
-      
-      db.transaction(tx => {
-        tx.executeSql(
-          `SELECT 
-            c.*,
-            COUNT(cm.totem_id) as member_count,
-            cm.role as user_role
-           FROM clans c
-           JOIN clan_members cm ON c.id = cm.clan_id
-           WHERE cm.totem_id = ?
-           GROUP BY c.id
-           ORDER BY c.created_at DESC`,
-          [totemId],
-          (_, { rows }) => {
-            const clans = rows._array.map(clan => ({
-              ...clan,
-              members: clan.member_count,
-              metadata: JSON.parse(clan.metadata || '{}'),
-              userRole: clan.user_role
-            }));
-            resolve(clans);
-          },
-          (_, error) => reject(error)
-        );
-      });
-    });
-  }
-
-  // Busca CLANN por ID
-  static async getClanById(clanId, totemId = null) {
-    return new Promise((resolve, reject) => {
-      const db = this.getDB();
-      
-      db.transaction(tx => {
-        // Busca CLANN
-        tx.executeSql(
-          `SELECT 
-            c.*,
-            COUNT(cm.totem_id) as member_count
-           FROM clans c
-           LEFT JOIN clan_members cm ON c.id = cm.clan_id
-           WHERE c.id = ?
-           GROUP BY c.id`,
-          [clanId],
-          (_, { rows }) => {
-            const clan = rows._array[0];
-            if (!clan) {
-              resolve(null);
-              return;
-            }
-            
-            const clanData = {
-              ...clan,
-              members: clan.member_count,
-              metadata: JSON.parse(clan.metadata || '{}')
-            };
-            
-            // Se fornecido totemId, verifica se é membro
-            if (totemId) {
-              tx.executeSql(
-                `SELECT role FROM clan_members 
-                 WHERE clan_id = ? AND totem_id = ?`,
-                [clanId, totemId],
-                (_, { rows: memberRows }) => {
-                  clanData.isMember = memberRows._array.length > 0;
-                  clanData.userRole = memberRows._array[0]?.role || null;
-                  resolve(clanData);
-                }
-              );
-            } else {
-              resolve(clanData);
-            }
-          },
-          (_, error) => reject(error)
-        );
-      });
-    });
-  }
-
-  // Lista membros de um CLANN
-  static async getClanMembers(clanId) {
-    return new Promise((resolve, reject) => {
-      const db = this.getDB();
-      
-      db.transaction(tx => {
-        tx.executeSql(
-          `SELECT 
-            cm.totem_id,
-            cm.role,
-            cm.joined_at,
-            CASE 
-              WHEN cm.role = 'founder' THEN 1
-              WHEN cm.role = 'admin' THEN 2
-              ELSE 3
-            END as sort_order
-           FROM clan_members cm
-           WHERE cm.clan_id = ?
-           ORDER BY sort_order, cm.joined_at`,
-          [clanId],
-          (_, { rows }) => resolve(rows._array),
-          (_, error) => reject(error)
-        );
-      });
-    });
-  }
-
-  // Sai de um CLANN
-  static async leaveClan(clanId, totemId) {
-    return new Promise((resolve, reject) => {
-      const db = this.getDB();
-      
-      db.transaction(tx => {
-        // Verifica se é o fundador
-        tx.executeSql(
-          `SELECT role FROM clan_members 
-           WHERE clan_id = ? AND totem_id = ?`,
-          [clanId, totemId],
-          (_, { rows }) => {
-            const role = rows._array[0]?.role;
-            
-            if (role === 'founder') {
-              // Fundador não pode sair sem transferir
-              reject(new Error('Fundador deve transferir o CLANN antes de sair'));
-              return;
-            }
-            
-            // Remove membro
-            tx.executeSql(
-              `DELETE FROM clan_members 
-               WHERE clan_id = ? AND totem_id = ?`,
-              [clanId, totemId],
-              () => resolve(true),
-              (_, error) => reject(error)
+              () => resolve(clan),
+              (_, err) => reject(err)
             );
           }
         );
+
       });
     });
   }
 
-  // Gera código de convite único
-  static generateInviteCode() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Remove I, O, 0, 1
-    let code = '';
+  // ---------------------------------------------------------
+  // Sair do CLANN
+  // ---------------------------------------------------------
+  leaveClan(clanId, totemId) {
+    return new Promise((resolve, reject) => {
+      this.db.transaction(tx => {
+        tx.executeSql(
+          `DELETE FROM clan_members WHERE clan_id = ? AND totem_id = ?;`,
+          [clanId, totemId],
+          () => resolve(true),
+          (_, err) => reject(err)
+        );
+      });
+    });
+  }
+
+  // ---------------------------------------------------------
+  // Buscar CLANN por ID
+  // ---------------------------------------------------------
+  getClanById(clanId) {
+    return new Promise((resolve, reject) => {
+      this.db.transaction(tx => {
+        tx.executeSql(
+          `
+          SELECT c.*, 
+            (SELECT COUNT(*) FROM clan_members WHERE clan_id = c.id) AS members
+          FROM clans c
+          WHERE c.id = ?
+          `,
+          [clanId],
+          (_, { rows }) => {
+            if (rows.length === 0) {
+              reject(new Error("CLANN não encontrado"));
+            } else {
+              resolve(rows.item(0));
+            }
+          },
+          (_, err) => reject(err)
+        );
+      });
+    });
+  }
+
+  // ---------------------------------------------------------
+  // Buscar CLANNs do usuário
+  // ---------------------------------------------------------
+  getUserClans(totemId) {
+    return new Promise((resolve, reject) => {
+      this.db.transaction(tx => {
+
+        tx.executeSql(
+          `
+          SELECT c.*, m.role,
+            (SELECT COUNT(*) FROM clan_members WHERE clan_id = c.id) AS members
+          FROM clans c
+          JOIN clan_members m ON m.clan_id = c.id
+          WHERE m.totem_id = ?
+          ORDER BY c.created_at DESC;
+          `,
+          [totemId],
+          (_, { rows }) => resolve(rows._array),
+          (_, err) => reject(err)
+        );
+
+      });
+    });
+  }
+
+  // ---------------------------------------------------------
+  // Utilitário interno
+  // ---------------------------------------------------------
+  _generateInviteCode() {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let code = "";
     for (let i = 0; i < 6; i++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length));
+      code += chars[Math.floor(Math.random() * chars.length)];
     }
     return code;
   }
 }
 
+export default new ClanStorage();
