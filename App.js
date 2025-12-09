@@ -30,6 +30,11 @@ import SecurityAuditScreen from './src/screens/SecurityAuditScreen';
 // Tela Home
 import HomeScreen from './src/screens/HomeScreen';
 
+// Context Providers
+import { TotemProvider } from './src/context/TotemContext';
+import { SecurityProvider } from './src/context/SecurityContext';
+import { ClanProvider } from './src/context/ClanContext';
+
 // Storage e Security
 import { hasTotemSecure } from './src/storage/secureStore';
 import { hasPin } from './src/security/PinManager';
@@ -77,44 +82,50 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer>
-      <StatusBar style="light" />
-      <Stack.Navigator
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: '#000000' },
-        }}
-      >
-        {hasTotem && hasPinConfigured && !pinVerified ? (
-          // Se tem Totem e PIN, precisa autenticar
-          <Stack.Screen name="EnterPin">
-            {(props) => <EnterPinScreen {...props} onSuccess={handlePinSuccess} />}
-          </Stack.Screen>
-        ) : hasTotem ? (
-          // Se tem Totem (com ou sem PIN), vai para Home
-          <>
-            <Stack.Screen name="Home" component={HomeScreen} />
-            <Stack.Screen name="ExportIdentity" component={ExportIdentityScreen} />
-            <Stack.Screen name="ImportIdentity" component={ImportIdentityScreen} />
-            <Stack.Screen name="SecurityAudit" component={SecurityAuditScreen} />
-          </>
-        ) : (
-          // Se não tem Totem, mostra onboarding
-          <>
-            <Stack.Screen name="Welcome" component={WelcomeScreen} />
-            <Stack.Screen name="TotemGeneration" component={TotemGenerationScreen} />
-            <Stack.Screen name="RecoveryPhrase" component={RecoveryPhraseScreen} />
-            <Stack.Screen name="VerifySeed" component={VerifySeedScreen} />
-            <Stack.Screen name="CreatePin" component={CreatePinScreen} />
-            <Stack.Screen name="ChooseStart" component={ChooseStartScreen} />
-            <Stack.Screen name="Home" component={HomeScreen} />
-            <Stack.Screen name="ExportIdentity" component={ExportIdentityScreen} />
-            <Stack.Screen name="ImportIdentity" component={ImportIdentityScreen} />
-            <Stack.Screen name="SecurityAudit" component={SecurityAuditScreen} />
-          </>
-        )}
-      </Stack.Navigator>
-    </NavigationContainer>
+    <TotemProvider>
+      <SecurityProvider>
+        <ClanProvider>
+          <NavigationContainer>
+            <StatusBar style="light" />
+            <Stack.Navigator
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: '#000000' },
+              }}
+            >
+              {hasTotem && hasPinConfigured && !pinVerified ? (
+                // Se tem Totem e PIN, precisa autenticar
+                <Stack.Screen name="EnterPin">
+                  {(props) => <EnterPinScreen {...props} onSuccess={handlePinSuccess} />}
+                </Stack.Screen>
+              ) : hasTotem ? (
+                // Se tem Totem (com ou sem PIN), vai para Home
+                <>
+                  <Stack.Screen name="Home" component={HomeScreen} />
+                  <Stack.Screen name="ExportIdentity" component={ExportIdentityScreen} />
+                  <Stack.Screen name="ImportIdentity" component={ImportIdentityScreen} />
+                  <Stack.Screen name="SecurityAudit" component={SecurityAuditScreen} />
+                </>
+              ) : (
+                // Se não tem Totem, mostra onboarding
+                <>
+                  <Stack.Screen name="Welcome" component={WelcomeScreen} />
+                  <Stack.Screen name="TotemGeneration" component={TotemGenerationScreen} />
+                  <Stack.Screen name="RecoveryPhrase" component={RecoveryPhraseScreen} />
+                  <Stack.Screen name="VerifySeed" component={VerifySeedScreen} />
+                  <Stack.Screen name="CreatePin" component={CreatePinScreen} />
+                  <Stack.Screen name="ChooseStart" component={ChooseStartScreen} />
+                  <Stack.Screen name="Home" component={HomeScreen} />
+                  <Stack.Screen name="ExportIdentity" component={ExportIdentityScreen} />
+                  <Stack.Screen name="ImportIdentity" component={ImportIdentityScreen} />
+                  <Stack.Screen name="SecurityAudit" component={SecurityAuditScreen} />
+                </>
+              )}
+            </Stack.Navigator>
+          </NavigationContainer>
+        </ClanProvider>
+      </SecurityProvider>
+    </TotemProvider>
   );
 }
 

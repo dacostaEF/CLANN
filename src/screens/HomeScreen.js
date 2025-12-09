@@ -3,7 +3,7 @@
  * Tela principal do app com acesso às funcionalidades
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,11 +11,22 @@ import {
   SafeAreaView,
   TouchableOpacity,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { useTotem } from '../context/TotemContext';
+import { useClan } from '../context/ClanContext';
 
 export default function HomeScreen({ navigation }) {
+  const { totem, loading: totemLoading } = useTotem();
+  const { myClans, loading: clansLoading, loadMyClans } = useClan();
+
+  useEffect(() => {
+    if (totem && totem.totemId) {
+      loadMyClans(totem.totemId);
+    }
+  }, [totem]);
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient
@@ -29,6 +40,66 @@ export default function HomeScreen({ navigation }) {
               <Text style={styles.subtitle}>
                 Identidade Soberana e Segurança Absoluta
               </Text>
+            </View>
+
+            <View style={styles.menuContainer}>
+              <Text style={styles.menuTitle}>Meus CLANNs</Text>
+              
+              {clansLoading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color="#4a90e2" />
+                  <Text style={styles.loadingText}>Carregando CLANNs...</Text>
+                </View>
+              ) : myClans.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                  <Ionicons name="people-outline" size={48} color="#666" />
+                  <Text style={styles.emptyText}>Você ainda não está em nenhum CLANN</Text>
+                </View>
+              ) : (
+                myClans.map((clan) => (
+                  <TouchableOpacity
+                    key={clan.clanId}
+                    style={styles.clanCard}
+                    onPress={() => {
+                      // Navegação será implementada no Sprint 3
+                      console.log('CLANN selecionado:', clan.clanId);
+                    }}
+                  >
+                    <Ionicons name="people" size={24} color="#4a90e2" />
+                    <View style={styles.clanCardText}>
+                      <Text style={styles.clanCardTitle}>{clan.name}</Text>
+                      <Text style={styles.clanCardDescription}>
+                        {clan.memberCount} / {clan.maxMembers} membros
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color="#666" />
+                  </TouchableOpacity>
+                ))
+              )}
+
+              <View style={styles.clanActions}>
+                <TouchableOpacity
+                  style={styles.clanActionButton}
+                  onPress={() => {
+                    // Navegação será implementada no Sprint 3
+                    console.log('Criar CLANN');
+                  }}
+                >
+                  <Ionicons name="add-circle-outline" size={24} color="#4a90e2" />
+                  <Text style={styles.clanActionText}>Criar CLANN</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.clanActionButton}
+                  onPress={() => {
+                    // Navegação será implementada no Sprint 3
+                    console.log('Entrar em CLANN');
+                  }}
+                >
+                  <Ionicons name="log-in-outline" size={24} color="#4a90e2" />
+                  <Text style={styles.clanActionText}>Entrar em CLANN</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             <View style={styles.menuContainer}>
@@ -169,6 +240,75 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginLeft: 12,
     lineHeight: 18,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    padding: 24,
+  },
+  loadingText: {
+    color: '#a0a0a0',
+    marginTop: 8,
+    fontSize: 14,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    padding: 32,
+    backgroundColor: '#1a1a2e',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#2a2a3e',
+  },
+  emptyText: {
+    color: '#a0a0a0',
+    marginTop: 16,
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  clanCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1a1a2e',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#2a2a3e',
+  },
+  clanCardText: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  clanCardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffffff',
+    marginBottom: 4,
+  },
+  clanCardDescription: {
+    fontSize: 12,
+    color: '#a0a0a0',
+  },
+  clanActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+  },
+  clanActionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1a1a2e',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#2a2a3e',
+  },
+  clanActionText: {
+    color: '#4a90e2',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
   },
 });
 
