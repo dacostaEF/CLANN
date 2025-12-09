@@ -8,7 +8,17 @@ import {
   Alert,
   Platform
 } from 'react-native';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+
+// Polyfill para web - câmera não funciona no navegador
+let CameraView, useCameraPermissions;
+if (Platform.OS === 'web') {
+  CameraView = () => <View><Text>Camera não disponível no navegador</Text></View>;
+  useCameraPermissions = () => [{ granted: false }, () => Promise.resolve({ granted: false })];
+} else {
+  const cameraModule = require('expo-camera');
+  CameraView = cameraModule.CameraView;
+  useCameraPermissions = cameraModule.useCameraPermissions;
+}
 
 export default function QRScannerModal({ visible, onClose, onScanned }) {
   const [facing, setFacing] = useState('back');

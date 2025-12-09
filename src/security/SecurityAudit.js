@@ -3,14 +3,31 @@
  * Registra eventos de segurança localmente
  */
 
-import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 import { validateTotem } from '../crypto/totem';
 import { loadTotemSecure } from '../storage/secureStore';
 import { hasPin, getRemainingAttempts, getLockRemainingTime } from './PinManager';
 import { isBiometryEnabled, isBiometryAvailable, getBiometryType } from './BiometryManager';
 import { getFailedAttempts, getRemainingAttempts as getSelfDestructRemaining } from './SelfDestruct';
 import { sha256 } from '@noble/hashes/sha256';
-import { Platform } from 'react-native';
+
+// Polyfill para web usando localStorage
+let SecureStore;
+if (Platform.OS === 'web') {
+  SecureStore = {
+    async setItemAsync(key, value) {
+      localStorage.setItem(key, value);
+    },
+    async getItemAsync(key) {
+      return localStorage.getItem(key);
+    },
+    async deleteItemAsync(key) {
+      localStorage.removeItem(key);
+    },
+  };
+} else {
+  SecureStore = require('expo-secure-store');
+}
 
 const AUDIT_KEY = 'security_audit';
 const LAST_ACCESS_KEY = 'last_access';

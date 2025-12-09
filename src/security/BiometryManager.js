@@ -3,8 +3,33 @@
  * Gerencia autenticação biométrica usando expo-local-authentication
  */
 
-import * as LocalAuthentication from 'expo-local-authentication';
-import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
+
+// Polyfills para web
+let LocalAuthentication;
+let SecureStore;
+
+if (Platform.OS === 'web') {
+  LocalAuthentication = {
+    async hasHardwareAsync() { return false; },
+    async isEnrolledAsync() { return false; },
+    async supportedAuthenticationTypesAsync() { return []; },
+    async authenticateAsync() { return { success: false }; },
+    AuthenticationType: {
+      FACIAL_RECOGNITION: 1,
+      IRIS: 2,
+      FINGERPRINT: 3,
+    },
+  };
+  SecureStore = {
+    async setItemAsync(key, value) { localStorage.setItem(key, value); },
+    async getItemAsync(key) { return localStorage.getItem(key); },
+    async deleteItemAsync(key) { localStorage.removeItem(key); },
+  };
+} else {
+  LocalAuthentication = require('expo-local-authentication');
+  SecureStore = require('expo-secure-store');
+}
 
 const BIOMETRY_ENABLED_KEY = 'biometry_enabled';
 const BIOMETRY_ATTEMPTS_KEY = 'biometry_attempts';

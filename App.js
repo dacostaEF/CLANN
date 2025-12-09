@@ -3,6 +3,7 @@ import { Buffer } from 'buffer';
 global.Buffer = Buffer;
 
 import React, { useEffect } from 'react';
+import { Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
@@ -43,10 +44,12 @@ const Stack = createNativeStackNavigator();
 export default function App() {
   
   useEffect(() => {
-    // Inicializar banco SQLite ao abrir o app
-    ClanStorage.init().catch(error => {
-      console.error('Erro ao inicializar banco:', error);
-    });
+    // Inicializar banco SQLite apenas em plataformas nativas (não web)
+    if (Platform.OS !== 'web') {
+      ClanStorage.init().catch(error => {
+        console.error('Erro ao inicializar banco:', error);
+      });
+    }
   }, []);
 
   return (

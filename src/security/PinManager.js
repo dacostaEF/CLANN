@@ -4,9 +4,27 @@
  * Gera chave AES para criptografia de backup
  */
 
-import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 import { sha256 } from '@noble/hashes/sha256';
 import { randomBytes } from '@noble/secp256k1';
+
+// Polyfill para web usando localStorage
+let SecureStore;
+if (Platform.OS === 'web') {
+  SecureStore = {
+    async setItemAsync(key, value) {
+      localStorage.setItem(key, value);
+    },
+    async getItemAsync(key) {
+      return localStorage.getItem(key);
+    },
+    async deleteItemAsync(key) {
+      localStorage.removeItem(key);
+    },
+  };
+} else {
+  SecureStore = require('expo-secure-store');
+}
 
 const PIN_KEY = 'pin_hash';
 const PIN_SALT_KEY = 'pin_salt';

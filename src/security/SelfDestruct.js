@@ -3,8 +3,26 @@
  * Detecta tentativas de invasão e destrói dados do Totem
  */
 
-import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 import { deleteTotemSecure } from '../storage/secureStore';
+
+// Polyfill para web usando localStorage
+let SecureStore;
+if (Platform.OS === 'web') {
+  SecureStore = {
+    async setItemAsync(key, value) {
+      localStorage.setItem(key, value);
+    },
+    async getItemAsync(key) {
+      return localStorage.getItem(key);
+    },
+    async deleteItemAsync(key) {
+      localStorage.removeItem(key);
+    },
+  };
+} else {
+  SecureStore = require('expo-secure-store');
+}
 
 const SELF_DESTRUCT_ATTEMPTS_KEY = 'self_destruct_attempts';
 const MAX_ATTEMPTS_BEFORE_DESTRUCT = 10;

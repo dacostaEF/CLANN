@@ -5,7 +5,15 @@
  * NÃO implementa níveis, reputação, tribunal ou votação.
  */
 
-import * as SQLite from 'expo-sqlite';
+import { Platform } from 'react-native';
+
+// Polyfill para web - SQLite não funciona no navegador
+let SQLite;
+if (Platform.OS === 'web') {
+  SQLite = null;
+} else {
+  SQLite = require('expo-sqlite');
+}
 
 let db = null;
 let initialized = false;
@@ -15,11 +23,20 @@ let initialized = false;
  * @returns {Promise<void>}
  */
 export async function init() {
+  if (Platform.OS === 'web') {
+    // No web, não há banco de dados
+    initialized = true;
+    return;
+  }
+  
   if (initialized && db) {
     return;
   }
 
   try {
+    if (!SQLite) {
+      throw new Error('SQLite não disponível no web');
+    }
     db = await SQLite.openDatabaseAsync('clann.db');
     
     // Cria tabela de CLANNs
@@ -71,6 +88,10 @@ export async function init() {
  * @returns {Promise<void>}
  */
 export async function saveClan(clan) {
+  if (Platform.OS === 'web') {
+    return; // No web, não salva
+  }
+  
   if (!initialized) {
     await init();
   }
@@ -119,6 +140,10 @@ export async function saveClan(clan) {
  * @returns {Promise<Array>} Lista de CLANNs
  */
 export async function getMyClans(totemId) {
+  if (Platform.OS === 'web') {
+    return []; // No web, retorna vazio
+  }
+  
   if (!initialized) {
     await init();
   }
@@ -180,6 +205,10 @@ export async function getMyClans(totemId) {
  * @returns {Promise<Object|null>} CLANN encontrado ou null
  */
 export async function getClanByInviteCode(code) {
+  if (Platform.OS === 'web') {
+    return null; // No web, retorna null
+  }
+  
   if (!initialized) {
     await init();
   }
@@ -235,6 +264,10 @@ export async function getClanByInviteCode(code) {
  * @returns {Promise<void>}
  */
 export async function addMember(clanId, totemId, role = 'member') {
+  if (Platform.OS === 'web') {
+    return; // No web, não adiciona
+  }
+  
   if (!initialized) {
     await init();
   }
@@ -275,6 +308,10 @@ export async function addMember(clanId, totemId, role = 'member') {
  * @returns {Promise<void>}
  */
 export async function removeMember(clanId, totemId) {
+  if (Platform.OS === 'web') {
+    return; // No web, não remove
+  }
+  
   if (!initialized) {
     await init();
   }
@@ -302,6 +339,10 @@ export async function removeMember(clanId, totemId) {
  * @returns {Promise<Object|null>} CLANN encontrado ou null
  */
 export async function getClanById(clanId) {
+  if (Platform.OS === 'web') {
+    return null; // No web, retorna null
+  }
+  
   if (!initialized) {
     await init();
   }

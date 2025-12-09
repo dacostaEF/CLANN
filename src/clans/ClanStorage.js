@@ -1,8 +1,20 @@
-import * as SQLite from 'expo-sqlite';
+import { Platform } from 'react-native';
+
+// Polyfill para web - SQLite não funciona no navegador
+let SQLite;
+if (Platform.OS === 'web') {
+  SQLite = null; // Não será usado no web
+} else {
+  SQLite = require('expo-sqlite');
+}
 
 class ClanStorage {
   constructor() {
-    this.db = SQLite.openDatabase('clans.db');
+    if (Platform.OS !== 'web' && SQLite) {
+      this.db = SQLite.openDatabase('clans.db');
+    } else {
+      this.db = null; // No web, não há banco
+    }
   }
 
   getDB() {
@@ -10,6 +22,11 @@ class ClanStorage {
   }
 
   async init() {
+    if (Platform.OS === 'web' || !this.db) {
+      // No web, não há banco de dados
+      return Promise.resolve(true);
+    }
+    
     return new Promise((resolve, reject) => {
       this.db.transaction(tx => {
 

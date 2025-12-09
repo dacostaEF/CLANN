@@ -1,4 +1,22 @@
-import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
+
+// Polyfill para web usando localStorage
+let SecureStore;
+if (Platform.OS === 'web') {
+  SecureStore = {
+    async setItemAsync(key, value) {
+      localStorage.setItem(key, value);
+    },
+    async getItemAsync(key) {
+      return localStorage.getItem(key);
+    },
+    async deleteItemAsync(key) {
+      localStorage.removeItem(key);
+    },
+  };
+} else {
+  SecureStore = require('expo-secure-store');
+}
 
 /**
  * Nome da chave usada no SecureStore
