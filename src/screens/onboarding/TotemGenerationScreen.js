@@ -53,7 +53,15 @@ export default function TotemGenerationScreen({ navigation }) {
   };
 
   const handleContinue = () => {
+    console.log('Navegando para RecoveryPhrase...', { 
+      recoveryPhrase: totem?.recoveryPhrase,
+      totemExists: !!totem 
+    });
     // Navega para tela de frase de recuperação
+    if (!totem?.recoveryPhrase) {
+      Alert.alert('Erro', 'Frase de recuperação não encontrada no Totem.');
+      return;
+    }
     navigation.navigate('RecoveryPhrase', { recoveryPhrase: totem.recoveryPhrase });
   };
 

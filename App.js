@@ -12,6 +12,7 @@ import { StatusBar } from 'expo-status-bar';
 import WelcomeScreen from './src/screens/onboarding/WelcomeScreen';
 import TotemGenerationScreen from './src/screens/onboarding/TotemGenerationScreen';
 import RecoveryPhraseScreen from './src/screens/onboarding/RecoveryPhraseScreen';
+import VerifySeedScreen from './src/screens/VerifySeedScreen';
 import CreatePinScreen from './src/screens/CreatePinScreen';
 import EnterPinScreen from './src/screens/EnterPinScreen';
 
@@ -75,6 +76,7 @@ export default function App() {
                 <Stack.Screen name="Welcome" component={WelcomeScreen} />
                 <Stack.Screen name="TotemGeneration" component={TotemGenerationScreen} />
                 <Stack.Screen name="RecoveryPhrase" component={RecoveryPhraseScreen} />
+                <Stack.Screen name="VerifySeed" component={VerifySeedScreen} />
 
                 {/* PIN */}
                 <Stack.Screen name="CreatePin" component={CreatePinScreen} />

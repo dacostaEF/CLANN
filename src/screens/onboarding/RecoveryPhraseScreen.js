@@ -18,13 +18,38 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 
 export default function RecoveryPhraseScreen({ route, navigation }) {
-  const { recoveryPhrase } = route.params;
+  console.log('RecoveryPhraseScreen renderizando...', { route: route?.params });
+  
+  // Verifica se recoveryPhrase foi passado
+  const recoveryPhrase = route?.params?.recoveryPhrase;
+  
+  if (!recoveryPhrase) {
+    console.error('RecoveryPhrase não encontrado nos parâmetros!', route?.params);
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.content}>
+          <Text style={styles.title}>Erro</Text>
+          <Text style={styles.errorText}>Frase de recuperação não encontrada.</Text>
+          <TouchableOpacity
+            style={styles.button}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.buttonText}>Voltar</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+  
   const words = recoveryPhrase.split(' ');
+  console.log('Palavras da frase:', words.length, 'palavras');
+  
   const [confirmedWords, setConfirmedWords] = useState({});
   const [selectedIndices, setSelectedIndices] = useState([]);
   const [inputValues, setInputValues] = useState({});
 
   useEffect(() => {
+    console.log('useEffect: selecionando índices para verificação...');
     // Seleciona 2 índices aleatórios para verificação
     const indices = [];
     while (indices.length < 2) {
@@ -33,8 +58,10 @@ export default function RecoveryPhraseScreen({ route, navigation }) {
         indices.push(index);
       }
     }
-    setSelectedIndices(indices.sort((a, b) => a - b));
-  }, []);
+    const sortedIndices = indices.sort((a, b) => a - b);
+    console.log('Índices selecionados:', sortedIndices);
+    setSelectedIndices(sortedIndices);
+  }, [words.length]);
 
   const copyPhrase = async () => {
     await Clipboard.setStringAsync(recoveryPhrase);
@@ -43,28 +70,55 @@ export default function RecoveryPhraseScreen({ route, navigation }) {
 
   const handleWordConfirm = (index, word) => {
     const trimmedWord = word.trim().toLowerCase();
-    if (trimmedWord === words[index].toLowerCase()) {
-      setConfirmedWords({
+    const correctWord = words[index].toLowerCase();
+    
+    console.log('Confirmando palavra:', { index, input: trimmedWord, correct: correctWord });
+    
+    if (trimmedWord === correctWord) {
+      const newConfirmed = {
         ...confirmedWords,
-        [index]: trimmedWord,
-      });
+        [index]: correctWord,
+      };
+      setConfirmedWords(newConfirmed);
       // Limpa o input
       setInputValues({
         ...inputValues,
         [index]: '',
       });
+      console.log('✅ Palavra confirmada!', { index, word: correctWord, confirmedWords: newConfirmed });
+      Alert.alert('✅ Palavra confirmada!', `A palavra na posição ${index + 1} foi confirmada corretamente.`);
     } else {
-      Alert.alert('Palavra incorreta', 'A palavra digitada não corresponde. Tente novamente.');
+      console.log('❌ Palavra incorreta!', { input: trimmedWord, expected: correctWord });
+      Alert.alert('❌ Palavra incorreta', `A palavra digitada não corresponde. Esperado: "${correctWord}", Digitado: "${trimmedWord}"`);
     }
   };
 
   const handleContinue = () => {
+    console.log('Tentando continuar...', { confirmedWords, selectedIndices, words });
+    
     // Verifica se as palavras foram confirmadas corretamente
     const allConfirmed = selectedIndices.every(
-      (index) => confirmedWords[index] === words[index]
+      (index) => {
+        const confirmed = confirmedWords[index]?.toLowerCase();
+        const expected = words[index]?.toLowerCase();
+        const match = confirmed === expected;
+        console.log(`Verificando palavra ${index}:`, { confirmed, expected, match });
+        return match;
+      }
     );
+    
+    // Debug: mostra estado atual
+    console.log('Estado completo:', {
+      selectedIndices,
+      confirmedWords,
+      words: words.map((w, i) => ({ index: i, word: w })),
+      allConfirmed
+    });
+
+    console.log('Todas confirmadas?', allConfirmed);
 
     if (!allConfirmed) {
+      console.log('Faltam palavras para confirmar');
       Alert.alert(
         'Verificação necessária',
         'Por favor, confirme as palavras corretamente antes de continuar.'
@@ -72,6 +126,7 @@ export default function RecoveryPhraseScreen({ route, navigation }) {
       return;
     }
 
+    console.log('Navegando para VerifySeed...');
     // Navega para verificação completa da seed (Sprint 2)
     navigation.navigate('VerifySeed', { recoveryPhrase });
   };
@@ -86,12 +141,24 @@ export default function RecoveryPhraseScreen({ route, navigation }) {
           </Text>
 
           <View style={styles.phraseContainer}>
-            {words.map((word, index) => (
-              <View key={index} style={styles.wordBox}>
-                <Text style={styles.wordNumber}>{index + 1}</Text>
-                <Text style={styles.word}>{word}</Text>
-              </View>
-            ))}
+            {words.map((word, index) => {
+              const needsVerification = selectedIndices.includes(index);
+              return (
+                <View 
+                  key={index} 
+                  style={[
+                    styles.wordBox,
+                    needsVerification && styles.wordBoxHighlighted
+                  ]}
+                >
+                  <Text style={styles.wordNumber}>{index + 1}</Text>
+                  <Text style={styles.word}>{word}</Text>
+                  {needsVerification && (
+                    <Ionicons name="checkmark-circle" size={16} color="#4a90e2" style={styles.verifyIcon} />
+                  )}
+                </View>
+              );
+            })}
           </View>
 
           <TouchableOpacity
@@ -105,7 +172,10 @@ export default function RecoveryPhraseScreen({ route, navigation }) {
 
           <View style={styles.verificationContainer}>
             <Text style={styles.verificationTitle}>
-              Confirme as palavras nas posições:
+              ⚠️ Confirme as palavras destacadas acima:
+            </Text>
+            <Text style={styles.verificationSubtitle}>
+              Digite as palavras nas posições {selectedIndices.map(i => i + 1).join(' e ')} para continuar
             </Text>
             {selectedIndices.map((index) => (
               <View key={index} style={styles.verificationRow}>
@@ -167,11 +237,21 @@ export default function RecoveryPhraseScreen({ route, navigation }) {
           </View>
 
           <TouchableOpacity
-            style={styles.button}
+            style={[
+              styles.button,
+              selectedIndices.length > 0 && selectedIndices.every(i => confirmedWords[i]) 
+                ? styles.buttonEnabled 
+                : styles.buttonDisabled
+            ]}
             onPress={handleContinue}
             activeOpacity={0.8}
+            disabled={!selectedIndices.every(i => confirmedWords[i])}
           >
-            <Text style={styles.buttonText}>Confirmar que anotei</Text>
+            <Text style={styles.buttonText}>
+              {selectedIndices.every(i => confirmedWords[i]) 
+                ? '✅ Confirmar que anotei' 
+                : `⚠️ Confirme ${selectedIndices.filter(i => !confirmedWords[i]).length} palavra(s) primeiro`}
+            </Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -197,6 +277,12 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     textAlign: 'center',
     marginBottom: 12,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#ff6b6b',
+    textAlign: 'center',
+    marginBottom: 24,
   },
   subtitle: {
     fontSize: 14,
@@ -238,6 +324,14 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     flex: 1,
   },
+  wordBoxHighlighted: {
+    backgroundColor: '#1a2a4a',
+    borderWidth: 2,
+    borderColor: '#4a90e2',
+  },
+  verifyIcon: {
+    marginLeft: 4,
+  },
   copyButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -263,6 +357,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#ffffff',
     fontWeight: '600',
+    marginBottom: 8,
+  },
+  verificationSubtitle: {
+    fontSize: 14,
+    color: '#a0a0a0',
     marginBottom: 16,
   },
   verificationRow: {
@@ -320,6 +419,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
+  },
+  buttonEnabled: {
+    backgroundColor: '#4a90e2',
+    opacity: 1,
+  },
+  buttonDisabled: {
+    backgroundColor: '#2a2a3e',
+    opacity: 0.5,
   },
   buttonText: {
     color: '#ffffff',
