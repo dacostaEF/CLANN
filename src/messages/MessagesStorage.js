@@ -64,7 +64,9 @@ class MessagesStorage {
   // ---------------------------------------------------------
   // Adicionar mensagem
   // ---------------------------------------------------------
-  async addMessage(clanId, authorTotem, text) {
+  async addMessage(clanId, authorTotem, text, options = {}) {
+    const { selfDestructAt = null, burnAfterRead = false } = options;
+    
     if (Platform.OS === 'web' || !this.db) {
       // Na Web, salva no localStorage
       const messages = this._getWebMessages();
@@ -73,7 +75,16 @@ class MessagesStorage {
         clan_id: parseInt(clanId),
         author_totem: authorTotem,
         message: text,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        self_destruct_at: selfDestructAt,
+        burn_after_read: burnAfterRead ? 1 : 0,
+        reactions: null, // Reações serão inicializadas quando necessário
+        delivered_to: JSON.stringify([]), // Sprint 6 - ETAPA 4
+        read_by: JSON.stringify([]), // Sprint 6 - ETAPA 4
+        edited: 0, // Sprint 6 - ETAPA 5
+        deleted: 0, // Sprint 6 - ETAPA 5
+        original_content: null, // Sprint 6 - ETAPA 5
+        edited_at: null // Sprint 6 - ETAPA 5
       };
       messages.push(newMessage);
       this._saveWebMessages(messages);
@@ -83,16 +94,39 @@ class MessagesStorage {
     return new Promise((resolve, reject) => {
       this.db.transaction(tx => {
         tx.executeSql(
-          `INSERT INTO clan_messages (clan_id, author_totem, message, timestamp)
-           VALUES (?, ?, ?, ?);`,
-          [clanId, authorTotem, text, Date.now()],
+          `INSERT INTO clan_messages (clan_id, author_totem, message, timestamp, self_destruct_at, burn_after_read, reactions, delivered_to, read_by, edited, deleted, original_content, edited_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+          [
+            clanId, 
+            authorTotem, 
+            text, 
+            Date.now(), 
+            selfDestructAt, 
+            burnAfterRead ? 1 : 0, 
+            null,
+            JSON.stringify([]), // Sprint 6 - ETAPA 4: delivered_to
+            JSON.stringify([]), // Sprint 6 - ETAPA 4: read_by
+            0, // Sprint 6 - ETAPA 5: edited
+            0, // Sprint 6 - ETAPA 5: deleted
+            null, // Sprint 6 - ETAPA 5: original_content
+            null // Sprint 6 - ETAPA 5: edited_at
+          ],
           (_, result) => {
             resolve({
               id: result.insertId,
               clan_id: clanId,
               author_totem: authorTotem,
               message: text,
-              timestamp: Date.now()
+              timestamp: Date.now(),
+              self_destruct_at: selfDestructAt,
+              burn_after_read: burnAfterRead ? 1 : 0,
+              reactions: null,
+              delivered_to: JSON.stringify([]),
+              read_by: JSON.stringify([]),
+              edited: 0,
+              deleted: 0,
+              original_content: null,
+              edited_at: null
             });
           },
           (_, error) => reject(error)
@@ -102,26 +136,42 @@ class MessagesStorage {
   }
 
   // ---------------------------------------------------------
-  // Buscar mensagens de um CLANN
+  // Buscar mensagens desde um timestamp (Sprint 6 - ETAPA 6)
   // ---------------------------------------------------------
-  async getMessages(clanId) {
+  async getMessagesSince(clanId, lastTimestamp) {
+    const now = Date.now();
+    
     if (Platform.OS === 'web' || !this.db) {
       // Na Web, busca no localStorage
       const messages = this._getWebMessages();
       const clanMessages = messages
-        .filter(m => m.clan_id === parseInt(clanId))
-        .sort((a, b) => a.timestamp - b.timestamp); // Ordena ASC (mais antigo primeiro)
+        .filter(m => {
+          // Filtra por CLANN
+          if (m.clan_id !== parseInt(clanId)) return false;
+          
+          // Filtra por timestamp (apenas mensagens mais recentes)
+          if (m.timestamp <= lastTimestamp) return false;
+          
+          // Remove mensagens expiradas (self-destruct)
+          if (m.self_destruct_at && m.self_destruct_at <= now) return false;
+          
+          return true;
+        })
+        .sort((a, b) => a.timestamp - b.timestamp); // Ordena ASC
       
       return Promise.resolve(clanMessages);
     }
 
     return new Promise((resolve, reject) => {
       this.db.transaction(tx => {
+        // Busca mensagens mais recentes que lastTimestamp
         tx.executeSql(
           `SELECT * FROM clan_messages 
            WHERE clan_id = ? 
+           AND timestamp > ?
+           AND (self_destruct_at IS NULL OR self_destruct_at > ?)
            ORDER BY timestamp ASC;`,
-          [clanId],
+          [clanId, lastTimestamp, now],
           (_, { rows }) => {
             const messages = [];
             for (let i = 0; i < rows.length; i++) {
@@ -136,7 +186,127 @@ class MessagesStorage {
   }
 
   // ---------------------------------------------------------
-  // Deletar mensagem (para futuro)
+  // Buscar mensagens de um CLANN (filtra expiradas)
+  // ---------------------------------------------------------
+  async getMessages(clanId) {
+    const now = Date.now();
+    
+    if (Platform.OS === 'web' || !this.db) {
+      // Na Web, busca no localStorage
+      const messages = this._getWebMessages();
+      const clanMessages = messages
+        .filter(m => {
+          // Filtra por CLANN
+          if (m.clan_id !== parseInt(clanId)) return false;
+          
+          // Remove mensagens expiradas (self-destruct)
+          if (m.self_destruct_at && m.self_destruct_at <= now) return false;
+          
+          return true;
+        })
+        .sort((a, b) => a.timestamp - b.timestamp); // Ordena ASC (mais antigo primeiro)
+      
+      return Promise.resolve(clanMessages);
+    }
+
+    return new Promise((resolve, reject) => {
+      this.db.transaction(tx => {
+        // Remove mensagens expiradas primeiro
+        tx.executeSql(
+          `DELETE FROM clan_messages 
+           WHERE clan_id = ? 
+           AND self_destruct_at IS NOT NULL 
+           AND self_destruct_at <= ?;`,
+          [clanId, now],
+          () => {},
+          (_, error) => console.warn('Erro ao limpar mensagens expiradas:', error)
+        );
+
+        // Busca mensagens não expiradas
+        tx.executeSql(
+          `SELECT * FROM clan_messages 
+           WHERE clan_id = ? 
+           AND (self_destruct_at IS NULL OR self_destruct_at > ?)
+           ORDER BY timestamp ASC;`,
+          [clanId, now],
+          (_, { rows }) => {
+            const messages = [];
+            for (let i = 0; i < rows.length; i++) {
+              messages.push(rows.item(i));
+            }
+            resolve(messages);
+          },
+          (_, error) => reject(error)
+        );
+      });
+    });
+  }
+
+  // ---------------------------------------------------------
+  // Atualizar mensagem (Sprint 6 - ETAPA 5)
+  // ---------------------------------------------------------
+  async updateMessage(messageId, updates) {
+    if (Platform.OS === 'web' || !this.db) {
+      // Na Web, atualiza no localStorage
+      const messages = this._getWebMessages();
+      const index = messages.findIndex(m => m.id === parseInt(messageId));
+      
+      if (index === -1) {
+        return Promise.reject(new Error('Mensagem não encontrada'));
+      }
+
+      // Aplicar atualizações
+      messages[index] = { ...messages[index], ...updates };
+      this._saveWebMessages(messages);
+      return Promise.resolve(true);
+    }
+
+    return new Promise((resolve, reject) => {
+      this.db.transaction(tx => {
+        // Construir query dinamicamente baseado nos updates
+        const fields = [];
+        const values = [];
+
+        if (updates.message !== undefined) {
+          fields.push('message = ?');
+          values.push(updates.message);
+        }
+        if (updates.original_content !== undefined) {
+          fields.push('original_content = ?');
+          values.push(updates.original_content);
+        }
+        if (updates.edited !== undefined) {
+          fields.push('edited = ?');
+          values.push(updates.edited);
+        }
+        if (updates.deleted !== undefined) {
+          fields.push('deleted = ?');
+          values.push(updates.deleted);
+        }
+        if (updates.edited_at !== undefined) {
+          fields.push('edited_at = ?');
+          values.push(updates.edited_at);
+        }
+
+        if (fields.length === 0) {
+          resolve(true);
+          return;
+        }
+
+        values.push(messageId);
+
+        tx.executeSql(
+          `UPDATE clan_messages SET ${fields.join(', ')} WHERE id = ?;`,
+          values,
+          () => resolve(true),
+          (_, error) => reject(error)
+        );
+      });
+    });
+  }
+
+  // ---------------------------------------------------------
+  // Deletar mensagem fisicamente (para uso interno)
   // ---------------------------------------------------------
   async deleteMessage(messageId) {
     if (Platform.OS === 'web' || !this.db) {

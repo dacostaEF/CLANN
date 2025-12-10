@@ -34,6 +34,7 @@ import SecurityAuditScreen from './src/screens/SecurityAuditScreen';
 
 // Banco SQLite
 import ClanStorage from './src/clans/ClanStorage';
+import { initE2E } from './src/security/e2e';
 
 // Context Providers
 import { TotemProvider } from './src/context/TotemContext';
@@ -52,6 +53,11 @@ export default function App() {
         console.error('Erro ao inicializar banco:', error);
       });
     }
+    
+    // Inicializar sistema E2E (Sprint 6)
+    initE2E().catch(error => {
+      console.error('Erro ao inicializar E2E:', error);
+    });
   }, []);
 
   return (

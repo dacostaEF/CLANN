@@ -133,7 +133,7 @@ class ClanStorage {
           );`
         );
 
-        // Mensagens do CLANN (Sprint 4)
+        // Mensagens do CLANN (Sprint 4 + Sprint 6)
         tx.executeSql(
           `CREATE TABLE IF NOT EXISTS clan_messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -141,8 +141,84 @@ class ClanStorage {
             author_totem TEXT NOT NULL,
             message TEXT NOT NULL,
             timestamp INTEGER NOT NULL,
+            self_destruct_at INTEGER,
+            burn_after_read INTEGER DEFAULT 0,
+            reactions TEXT,
+            delivered_to TEXT,
+            read_by TEXT,
+            edited INTEGER DEFAULT 0,
+            deleted INTEGER DEFAULT 0,
+            original_content TEXT,
+            edited_at INTEGER,
             FOREIGN KEY (clan_id) REFERENCES clans(id)
           );`
+        );
+
+        // Adicionar colunas se não existirem (migration para Sprint 6)
+        tx.executeSql(
+          `ALTER TABLE clan_messages ADD COLUMN self_destruct_at INTEGER;`,
+          [],
+          () => {},
+          () => {} // Ignora erro se coluna já existe
+        );
+        
+        tx.executeSql(
+          `ALTER TABLE clan_messages ADD COLUMN burn_after_read INTEGER DEFAULT 0;`,
+          [],
+          () => {},
+          () => {} // Ignora erro se coluna já existe
+        );
+
+        // Adicionar coluna reactions (Sprint 6 - ETAPA 3)
+        tx.executeSql(
+          `ALTER TABLE clan_messages ADD COLUMN reactions TEXT;`,
+          [],
+          () => {},
+          () => {} // Ignora erro se coluna já existe
+        );
+
+        // Adicionar colunas de status de entrega (Sprint 6 - ETAPA 4)
+        tx.executeSql(
+          `ALTER TABLE clan_messages ADD COLUMN delivered_to TEXT;`,
+          [],
+          () => {},
+          () => {} // Ignora erro se coluna já existe
+        );
+
+        tx.executeSql(
+          `ALTER TABLE clan_messages ADD COLUMN read_by TEXT;`,
+          [],
+          () => {},
+          () => {} // Ignora erro se coluna já existe
+        );
+
+        // Adicionar colunas de edição/exclusão (Sprint 6 - ETAPA 5)
+        tx.executeSql(
+          `ALTER TABLE clan_messages ADD COLUMN edited INTEGER DEFAULT 0;`,
+          [],
+          () => {},
+          () => {} // Ignora erro se coluna já existe
+        );
+
+        tx.executeSql(
+          `ALTER TABLE clan_messages ADD COLUMN deleted INTEGER DEFAULT 0;`,
+          [],
+          () => {},
+          () => {} // Ignora erro se coluna já existe
+        );
+
+        tx.executeSql(
+          `ALTER TABLE clan_messages ADD COLUMN original_content TEXT;`,
+          [],
+          () => {},
+          () => {} // Ignora erro se coluna já existe
+        );
+
+        tx.executeSql(
+          `ALTER TABLE clan_messages ADD COLUMN edited_at INTEGER;`,
+          [],
+          () => {},
+          () => {} // Ignora erro se coluna já existe
         );
 
         // Índice para performance nas queries de mensagens

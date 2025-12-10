@@ -1,11 +1,14 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { chatTheme } from '../../styles/chatTheme';
+import ReactionRow from './ReactionRow';
+import MessageStatus from './MessageStatus';
 
 /**
  * Bolha de mensagem estilo WhatsApp/Telegram
  * Suporta mensagens enviadas e recebidas
+ * Sprint 6 - ETAPA 3: Suporte a reações
  */
 export default function MessageBubble({ 
   message, 
@@ -13,7 +16,18 @@ export default function MessageBubble({
   authorName, 
   timestamp,
   showAuthor = false,
-  showAvatar = false 
+  showAvatar = false,
+  selfDestructAt = null,
+  burnAfterRead = false,
+  reactions = null,
+  onLongPress = null,
+  onReactionPress = null,
+  currentTotemId = null,
+  deliveredTo = [],
+  readBy = [],
+  edited = false,
+  deleted = false,
+  editedAt = null
 }) {
   const formatTime = (ts) => {
     const date = new Date(ts);
@@ -32,20 +46,33 @@ export default function MessageBubble({
         <Text style={styles.authorName}>{authorName}</Text>
       )}
 
-      {/* Container da bolha */}
-      <View style={[
-        styles.bubble,
-        isSent ? styles.bubbleSent : styles.bubbleReceived
-      ]}>
+      {/* Container da bolha com long press (Sprint 6 - ETAPA 3) */}
+      <TouchableOpacity
+        style={[
+          styles.bubble,
+          isSent ? styles.bubbleSent : styles.bubbleReceived
+        ]}
+        onLongPress={onLongPress}
+        activeOpacity={0.9}
+        delayLongPress={500}
+      >
         <Text style={[
           styles.messageText,
-          isSent ? styles.messageTextSent : styles.messageTextReceived
+          isSent ? styles.messageTextSent : styles.messageTextReceived,
+          deleted && styles.deletedText
         ]}>
           {message}
         </Text>
 
         {/* Timestamp e indicadores */}
         <View style={styles.footer}>
+          {/* Indicador de self-destruct ou burn-after-read (Sprint 6) */}
+          {(selfDestructAt || burnAfterRead) && (
+            <Text style={styles.destructIcon}>
+              {burnAfterRead ? '🔥' : '⏳'}
+            </Text>
+          )}
+          
           <Text style={[
             styles.timestamp,
             isSent ? styles.timestampSent : styles.timestampReceived
@@ -53,18 +80,29 @@ export default function MessageBubble({
             {formatTime(timestamp)}
           </Text>
           
-          {/* Indicadores de leitura (apenas para mensagens enviadas) */}
+          {/* Indicador de edição (Sprint 6 - ETAPA 5) */}
+          {edited && !deleted && (
+            <Text style={styles.editedLabel}>(editado)</Text>
+          )}
+          
+          {/* Status de mensagem (Sprint 6 - ETAPA 4) - apenas para mensagens enviadas */}
           {isSent && (
-            <View style={styles.checkmarks}>
-              <Ionicons 
-                name="checkmark-done" 
-                size={14} 
-                color={chatTheme.checkmarkRead} 
-              />
-            </View>
+            <MessageStatus 
+              deliveredTo={deliveredTo}
+              readBy={readBy}
+            />
           )}
         </View>
-      </View>
+      </TouchableOpacity>
+
+      {/* Linha de reações (Sprint 6 - ETAPA 3) */}
+      {reactions && (
+        <ReactionRow
+          reactions={reactions}
+          onReactionPress={onReactionPress}
+          currentTotemId={currentTotemId}
+        />
+      )}
     </View>
   );
 }
@@ -119,6 +157,16 @@ const styles = StyleSheet.create({
   messageTextReceived: {
     color: chatTheme.textPrimary,
   },
+  deletedText: {
+    fontStyle: 'italic',
+    opacity: 0.7,
+  },
+  editedLabel: {
+    fontSize: 10,
+    color: chatTheme.textTertiary,
+    marginLeft: 4,
+    fontStyle: 'italic',
+  },
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -137,6 +185,10 @@ const styles = StyleSheet.create({
   },
   checkmarks: {
     marginLeft: 2,
+  },
+  destructIcon: {
+    fontSize: 12,
+    marginRight: 4,
   },
 });
 
