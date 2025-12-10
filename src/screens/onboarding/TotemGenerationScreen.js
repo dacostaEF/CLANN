@@ -1,51 +1,156 @@
 /**
- * Tela de Geração do Totem
- * Mostra as informações do Totem gerado
+ * Tela de Geração do Totem - Design Premium
+ * Mantém 100% da lógica do Totem (não altera totem.js, seed.js, totemStorage.js ou contexts)
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   SafeAreaView,
-  ScrollView,
-  ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
-import { generateTotem } from '../../crypto/totem';
-import { saveTotemSecure } from '../../storage/secureStore';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 
-export default function TotemGenerationScreen({ navigation }) {
-  const [totem, setTotem] = useState(null);
-  const [loading, setLoading] = useState(true);
+// Mantendo os imports originais da lógica do Totem
+import { generateTotem } from '../../crypto/totem';
+import { saveTotemSecure } from '../../storage/secureStore';
+import { useTotem } from '../../context/TotemContext';
 
+// CSS Global para animações na Web
+const globalCSS = `
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.8; }
+}
+
+@keyframes glow {
+  0% { filter: drop-shadow(0 0 4px rgba(120,180,255,0.5)); }
+  50% { filter: drop-shadow(0 0 12px rgba(120,180,255,0.9)); }
+  100% { filter: drop-shadow(0 0 4px rgba(120,180,255,0.5)); }
+}
+`;
+
+export default function TotemGenerationScreen({ navigation }) {
+  const { setTotem } = useTotem();
+  const [loading, setLoading] = useState(true);
+  const [totemData, setTotemData] = useState(null);
+
+  // Refs para aplicar animações CSS diretamente no DOM (Web)
+  const ringRef = useRef(null);
+  const iconWrapperRef = useRef(null);
+  const shieldContainerRef = useRef(null);
+
+  // Injetar CSS global e aplicar animações na Web
   useEffect(() => {
+    if (Platform.OS === 'web') {
+      // Injetar CSS global
+      const styleId = 'totem-generation-animations';
+      let styleElement = document.getElementById(styleId);
+      
+      if (!styleElement) {
+        styleElement = document.createElement('style');
+        styleElement.id = styleId;
+        styleElement.textContent = globalCSS;
+        document.head.appendChild(styleElement);
+      }
+
+      // Função helper para aplicar animação CSS via setNativeProps ou DOM direto
+      const applyAnimation = (ref, animation) => {
+        if (!ref?.current) return;
+        
+        try {
+          const element = ref.current;
+          
+          // Método 1: Usar setNativeProps (React Native Web suporta)
+          if (typeof element.setNativeProps === 'function') {
+            element.setNativeProps({
+              style: { 
+                animation,
+                WebkitAnimation: animation, // Prefixo para Safari
+              },
+            });
+            return;
+          }
+          
+          // Método 2: Acessar DOM diretamente (fallback)
+          // React Native Web armazena referência ao DOM em diferentes lugares
+          const domElement = 
+            element._node || 
+            element._nativeNode || 
+            (element._owner && element._owner._instance) ||
+            element;
+          
+          if (domElement && domElement.style) {
+            domElement.style.animation = animation;
+            domElement.style.WebkitAnimation = animation;
+          }
+        } catch (error) {
+          // Silenciosamente falhar se não conseguir aplicar (pode ser mobile)
+          if (__DEV__) {
+            console.warn('Erro ao aplicar animação CSS (normal em mobile):', error.message);
+          }
+        }
+      };
+
+      // Aplicar animações após um pequeno delay para garantir que os elementos estão renderizados
+      const timeoutId = setTimeout(() => {
+        applyAnimation(ringRef, 'spin 2.4s linear infinite');
+        applyAnimation(iconWrapperRef, 'pulse 1.8s ease-in-out infinite');
+        applyAnimation(shieldContainerRef, 'glow 2.4s ease-in-out infinite');
+      }, 200);
+
+      // Cleanup ao desmontar
+      return () => {
+        clearTimeout(timeoutId);
+        const element = document.getElementById(styleId);
+        if (element) {
+          element.remove();
+        }
+      };
+    }
+  }, [loading]); // Re-executar quando loading mudar para garantir que os elementos existam
+
+  // Geração do Totem (lógica original mantida)
+  useEffect(() => {
+    const generateTotemData = async () => {
+      try {
+        setLoading(true);
+        console.log('Gerando Totem...');
+        const newTotem = generateTotem();
+        console.log('Totem gerado:', newTotem);
+        
+        // Salva o Totem de forma segura
+        console.log('Salvando Totem...');
+        await saveTotemSecure(newTotem);
+        console.log('Totem salvo com sucesso');
+        
+        // Atualiza o context
+        setTotem(newTotem);
+        setTotemData(newTotem);
+
+        // Delay para mostrar a animação
+        setTimeout(() => setLoading(false), 800);
+      } catch (error) {
+        console.error('Erro ao gerar Totem:', error);
+        Alert.alert('Erro', `Não foi possível gerar o Totem: ${error.message}`);
+        setLoading(false);
+      }
+    };
+
     generateTotemData();
   }, []);
-
-  const generateTotemData = async () => {
-    try {
-      setLoading(true);
-      console.log('Gerando Totem...');
-      const newTotem = generateTotem();
-      console.log('Totem gerado:', newTotem);
-      setTotem(newTotem);
-      
-      // Salva o Totem de forma segura
-      console.log('Salvando Totem...');
-      await saveTotemSecure(newTotem);
-      console.log('Totem salvo com sucesso');
-      setLoading(false);
-    } catch (error) {
-      console.error('Erro ao gerar Totem:', error);
-      Alert.alert('Erro', `Não foi possível gerar o Totem: ${error.message}`);
-      setLoading(false);
-    }
-  };
 
   const copyToClipboard = async (text, label) => {
     await Clipboard.setStringAsync(text);
@@ -53,177 +158,199 @@ export default function TotemGenerationScreen({ navigation }) {
   };
 
   const handleContinue = () => {
-    console.log('Navegando para RecoveryPhrase...', { 
-      recoveryPhrase: totem?.recoveryPhrase,
-      totemExists: !!totem 
+    console.log('Navegando para RecoveryPhrase...', {
+      recoveryPhrase: totemData?.recoveryPhrase,
+      totemExists: !!totemData,
     });
-    // Navega para tela de frase de recuperação
-    if (!totem?.recoveryPhrase) {
+    // Navega para tela de frase de recuperação (mantendo a lógica original)
+    if (!totemData?.recoveryPhrase) {
       Alert.alert('Erro', 'Frase de recuperação não encontrada no Totem.');
       return;
     }
-    navigation.navigate('RecoveryPhrase', { recoveryPhrase: totem.recoveryPhrase });
+    navigation.navigate('RecoveryPhrase', { recoveryPhrase: totemData.recoveryPhrase });
   };
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#4a90e2" />
-          <Text style={styles.loadingText}>Gerando seu Totem...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (!totem) {
-    return null;
-  }
-
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+    <LinearGradient
+      colors={['#000000', '#0A1533', '#000000']}
+      locations={[0, 0.6, 1]}
+      style={styles.container}
+    >
+      <SafeAreaView style={styles.safeArea}>
         <View style={styles.content}>
-          <Text style={styles.title}>Seu Totem foi criado!</Text>
-
-          <View style={styles.totemCard}>
-            <View style={styles.totemHeader}>
-              <Ionicons name="shield" size={48} color="#4a90e2" />
-              <Text style={styles.totemName}>{totem.symbolicName}</Text>
-            </View>
-
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>ID:</Text>
-              <View style={styles.infoValueContainer}>
-                <Text style={styles.infoValue}>{totem.totemId.substring(0, 4).toUpperCase()}</Text>
-                <TouchableOpacity
-                  onPress={() => copyToClipboard(totem.totemId, 'ID do Totem')}
-                  style={styles.copyButton}
-                >
-                  <Ionicons name="copy-outline" size={20} color="#4a90e2" />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Chave Pública:</Text>
-              <View style={styles.infoValueContainer}>
-                <Text style={styles.publicKey} numberOfLines={1} ellipsizeMode="middle">
-                  {totem.publicKey.substring(0, 12)}...{totem.publicKey.substring(totem.publicKey.length - 12)}
-                </Text>
-                <TouchableOpacity
-                  onPress={() => copyToClipboard(totem.publicKey, 'Chave pública')}
-                  style={styles.copyButton}
-                >
-                  <Ionicons name="copy-outline" size={20} color="#4a90e2" />
-                </TouchableOpacity>
+          {/* Ícone animado com anel girando */}
+          <View style={styles.iconContainer}>
+            <View ref={ringRef} style={styles.ring} />
+            <View ref={iconWrapperRef} style={styles.iconWrapper}>
+              <View ref={shieldContainerRef} style={styles.shieldContainer}>
+                <Ionicons name="shield" size={48} color="#4a90e2" style={styles.shieldIcon} />
               </View>
             </View>
           </View>
 
-          <TouchableOpacity
-            style={styles.button}
-            onPress={handleContinue}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.buttonText}>Ver frase de recuperação</Text>
-          </TouchableOpacity>
+          {/* Títulos dinâmicos */}
+          <Text style={styles.title}>
+            {loading ? 'Forjando seu Totem…' : 'Seu Totem nasceu!'}
+          </Text>
+
+          <Text style={styles.subtitle}>
+            {loading
+              ? 'Preparando sua identidade criptográfica.'
+              : 'Ele agora faz parte de você. Proteja-o.'}
+          </Text>
+
+          {/* Card do Totem (apenas quando não está carregando) */}
+          {!loading && totemData && (
+            <View style={styles.card}>
+              <Text style={styles.cardName}>{totemData.symbolicName}</Text>
+
+              <View style={styles.row}>
+                <Text style={styles.label}>ID:</Text>
+                <TouchableOpacity
+                  onPress={() => copyToClipboard(totemData.totemId, 'ID do Totem')}
+                  style={styles.copyButton}
+                >
+                  <Text style={styles.value}>{totemData.totemId.substring(0, 8).toUpperCase()}</Text>
+                  <Ionicons name="copy-outline" size={18} color="#4a90e2" style={styles.copyIcon} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.row}>
+                <Text style={styles.label}>Chave Pública:</Text>
+                <TouchableOpacity
+                  onPress={() => copyToClipboard(totemData.publicKey, 'Chave pública')}
+                  style={styles.copyButton}
+                >
+                  <Text style={styles.value} numberOfLines={1}>
+                    {totemData.publicKey.substring(0, 12)}...
+                  </Text>
+                  <Ionicons name="copy-outline" size={18} color="#4a90e2" style={styles.copyIcon} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* Botão de continuar (apenas quando não está carregando) */}
+          {!loading && totemData && (
+            <TouchableOpacity style={styles.button} onPress={handleContinue} activeOpacity={0.8}>
+              <Text style={styles.buttonText}>Ver frase de recuperação</Text>
+            </TouchableOpacity>
+          )}
         </View>
-      </ScrollView>
-    </SafeAreaView>
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
   },
-  loadingContainer: {
+  safeArea: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    color: '#a0a0a0',
-    marginTop: 16,
-    fontSize: 16,
-  },
-  scrollContent: {
-    flexGrow: 1,
   },
   content: {
     flex: 1,
-    padding: 24,
+    paddingTop: 140,
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  iconContainer: {
+    width: 140,
+    height: 140,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 30,
+    position: 'relative',
+  },
+  ring: {
+    position: 'absolute',
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    borderWidth: 3,
+    borderColor: 'rgba(80,140,255,0.5)',
+  },
+  iconWrapper: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: 'rgba(80,140,255,0.15)',
+    alignItems: 'center',
     justifyContent: 'center',
   },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    textAlign: 'center',
-    marginBottom: 32,
-  },
-  totemCard: {
-    backgroundColor: '#1a1a2e',
-    borderRadius: 16,
-    padding: 24,
-    marginBottom: 32,
-    borderWidth: 1,
-    borderColor: '#2a2a3e',
-  },
-  totemHeader: {
+  shieldContainer: {
     alignItems: 'center',
-    marginBottom: 24,
+    justifyContent: 'center',
   },
-  totemName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#4a90e2',
-    marginTop: 12,
+  shieldIcon: {
+    // Animação aplicada via ref no useEffect
+  },
+  title: {
+    color: '#ffffff',
+    fontSize: 26,
+    fontWeight: '700',
+    marginBottom: 6,
     textAlign: 'center',
   },
-  infoRow: {
+  subtitle: {
+    color: '#aaaaaa',
+    fontSize: 15,
+    marginBottom: 40,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  card: {
+    width: '100%',
+    backgroundColor: '#111827',
+    padding: 22,
+    borderRadius: 14,
+    marginBottom: 30,
+    borderWidth: 1,
+    borderColor: '#1f2937',
+  },
+  cardName: {
+    color: '#4a90e2',
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 18,
+    textAlign: 'center',
+  },
+  row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#2a2a3e',
+    borderBottomColor: '#1f2937',
   },
-  infoLabel: {
+  label: {
+    color: '#666666',
     fontSize: 14,
-    color: '#a0a0a0',
     flex: 1,
   },
-  infoValueContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 2,
-    justifyContent: 'flex-end',
-  },
-  infoValue: {
-    fontSize: 16,
+  value: {
     color: '#ffffff',
-    fontWeight: '600',
-    marginRight: 8,
-  },
-  publicKey: {
-    fontSize: 12,
-    color: '#ffffff',
+    fontSize: 14,
     fontFamily: 'monospace',
     marginRight: 8,
     flex: 1,
     textAlign: 'right',
   },
   copyButton: {
-    padding: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 2,
+    justifyContent: 'flex-end',
+  },
+  copyIcon: {
+    marginLeft: 4,
   },
   button: {
     backgroundColor: '#4a90e2',
     paddingVertical: 16,
-    paddingHorizontal: 48,
+    paddingHorizontal: 40,
     borderRadius: 12,
     alignItems: 'center',
     shadowColor: '#4a90e2',
@@ -231,15 +358,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
+    minWidth: 280,
   },
   buttonText: {
     color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '700',
+    fontSize: 16,
   },
 });
-
-
-
-
-
