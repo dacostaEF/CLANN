@@ -11,6 +11,7 @@ if (Platform.OS === 'web') {
 // Chaves para localStorage na Web
 const WEB_CLANS_KEY = 'clann_clans';
 const WEB_CLAN_MEMBERS_KEY = 'clann_clan_members';
+const WEB_MESSAGES_KEY = 'clann_messages';
 
 class ClanStorage {
   constructor() {
@@ -59,6 +60,25 @@ class ClanStorage {
       localStorage.setItem(WEB_CLAN_MEMBERS_KEY, JSON.stringify(members));
     } catch (error) {
       console.error('Erro ao salvar membros no localStorage:', error);
+    }
+  }
+
+  _getWebMessages() {
+    if (Platform.OS !== 'web') return [];
+    try {
+      const data = localStorage.getItem(WEB_MESSAGES_KEY);
+      return data ? JSON.parse(data) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  _saveWebMessages(messages) {
+    if (Platform.OS !== 'web') return;
+    try {
+      localStorage.setItem(WEB_MESSAGES_KEY, JSON.stringify(messages));
+    } catch (error) {
+      console.error('Erro ao salvar mensagens no localStorage:', error);
     }
   }
 
@@ -111,6 +131,23 @@ class ClanStorage {
             created_at TEXT NOT NULL,
             FOREIGN KEY (clan_id) REFERENCES clans(id)
           );`
+        );
+
+        // Mensagens do CLANN (Sprint 4)
+        tx.executeSql(
+          `CREATE TABLE IF NOT EXISTS clan_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            clan_id INTEGER NOT NULL,
+            author_totem TEXT NOT NULL,
+            message TEXT NOT NULL,
+            timestamp INTEGER NOT NULL,
+            FOREIGN KEY (clan_id) REFERENCES clans(id)
+          );`
+        );
+
+        // Índice para performance nas queries de mensagens
+        tx.executeSql(
+          `CREATE INDEX IF NOT EXISTS idx_messages_clan_id ON clan_messages(clan_id);`
         );
 
       },

@@ -1,16 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
-  TextInput,
   StyleSheet,
   FlatList,
-  TouchableOpacity
+  Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRoute, useNavigation } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
+import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 import ClanStorage from '../clans/ClanStorage';
+import MessagesManager from '../messages/MessagesManager';
+import { getCurrentTotemId } from '../crypto/totemStorage';
+import ChatHeader from '../components/chat/ChatHeader';
+import MessageBubble from '../components/chat/MessageBubble';
+import MessageInput from '../components/chat/MessageInput';
+import DateSeparator from '../components/chat/DateSeparator';
+import TypingIndicator from '../components/chat/TypingIndicator';
+import { chatTheme } from '../styles/chatTheme';
 
 export default function ClanChatScreen() {
   const route = useRoute();
@@ -20,8 +27,30 @@ export default function ClanChatScreen() {
   const [clan, setClan] = useState(clanFromParams || null);
   const [messages, setMessages] = useState([]);
   const [messageText, setMessageText] = useState('');
+  const [currentTotemId, setCurrentTotemId] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [memberCount, setMemberCount] = useState(0);
+  
+  const flatListRef = useRef(null);
 
+  // Inicialização
   useEffect(() => {
+    // Inicializar MessagesManager
+    MessagesManager.init().catch(error => {
+      console.error('Erro ao inicializar MessagesManager:', error);
+    });
+
+    // Carregar totemId atual
+    const loadTotemId = async () => {
+      try {
+        const totemId = await getCurrentTotemId();
+        setCurrentTotemId(totemId);
+      } catch (error) {
+        console.error('Erro ao carregar totemId:', error);
+      }
+    };
+    loadTotemId();
+
     // Se já recebeu o CLANN via params, usa diretamente
     if (clanFromParams) {
       setClan(clanFromParams);
@@ -34,127 +63,217 @@ export default function ClanChatScreen() {
     }
   }, [clanId, clanFromParams]);
 
+  // Carregar mensagens quando o CLANN estiver disponível
+  useEffect(() => {
+    if (clan?.id) {
+      loadMessages();
+    }
+  }, [clan?.id, loadMessages]);
+
   const loadClan = async () => {
     try {
       const data = await ClanStorage.getClanById(clanId);
       setClan(data);
+      if (data?.members) {
+        setMemberCount(data.members);
+      }
     } catch (err) {
       console.error('Erro ao carregar CLANN:', err);
     }
   };
 
-  const handleSendMessage = () => {
-    if (!messageText.trim() || !clan) return;
+  // Atualizar contagem de membros quando o CLANN mudar
+  useEffect(() => {
+    if (clan?.members) {
+      setMemberCount(clan.members);
+    }
+  }, [clan]);
+
+  // Carregar mensagens
+  const loadMessages = useCallback(async () => {
+    if (!clan?.id) return;
     
-    // Por enquanto, apenas mostra que o chat será implementado
-    // No Sprint 4, aqui será a lógica de envio de mensagens
-    setMessageText('');
+    try {
+      setLoading(true);
+      const msgs = await MessagesManager.getMessages(clan.id);
+      setMessages(msgs);
+      
+      // Scroll para o final após um pequeno delay
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    } catch (error) {
+      console.error('Erro ao carregar mensagens:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [clan?.id]);
+
+  // Recarregar mensagens ao focar na tela
+  useFocusEffect(
+    useCallback(() => {
+      if (clan?.id) {
+        loadMessages();
+      }
+    }, [clan?.id, loadMessages])
+  );
+
+  // Enviar mensagem
+  const handleSendMessage = async () => {
+    if (!messageText.trim() || !clan?.id || !currentTotemId) return;
+    
+    try {
+      await MessagesManager.addMessage(
+        clan.id,
+        currentTotemId,
+        messageText.trim()
+      );
+      
+      setMessageText('');
+      await loadMessages(); // Recarregar lista
+    } catch (error) {
+      console.error('Erro ao enviar mensagem:', error);
+      Alert.alert('Erro', 'Não foi possível enviar a mensagem');
+    }
+  };
+
+  // Verificar se deve mostrar nome do autor
+  const shouldShowAuthor = useCallback((currentMsg, prevMsg) => {
+    if (!prevMsg || prevMsg.type !== 'message') return true;
+    if (currentMsg.authorTotem !== prevMsg.authorTotem) return true;
+    
+    // Mostrar se passou mais de 5 minutos
+    const timeDiff = currentMsg.timestamp - prevMsg.timestamp;
+    return timeDiff > 5 * 60 * 1000;
+  }, []);
+
+  // Agrupar mensagens por data e preparar para renderização
+  const groupedMessages = useMemo(() => {
+    if (!messages.length) return [];
+
+    const grouped = [];
+    let currentDate = null;
+
+    messages.forEach((msg) => {
+      const msgDate = new Date(msg.timestamp);
+      const dateKey = `${msgDate.getFullYear()}-${msgDate.getMonth()}-${msgDate.getDate()}`;
+
+      // Adicionar separador de data se necessário
+      if (currentDate !== dateKey) {
+        currentDate = dateKey;
+        grouped.push({
+          type: 'date',
+          timestamp: msg.timestamp,
+          id: `date-${dateKey}`,
+        });
+      }
+
+      // Adicionar mensagem
+      grouped.push({
+        type: 'message',
+        ...msg,
+      });
+    });
+
+    return grouped;
+  }, [messages]);
+
+  const renderItem = ({ item, index }) => {
+    if (item.type === 'date') {
+      return <DateSeparator timestamp={item.timestamp} />;
+    }
+
+    if (item.type === 'message') {
+      const isMyMessage = item.authorTotem === currentTotemId;
+      const prevItem = groupedMessages[index + 1];
+      const showAuthor = shouldShowAuthor(item, prevItem);
+
+      return (
+        <MessageBubble
+          message={item.message}
+          isSent={isMyMessage}
+          authorName={!isMyMessage ? `Totem ${item.authorTotem.slice(0, 8)}...` : null}
+          timestamp={item.timestamp}
+          showAuthor={showAuthor && !isMyMessage}
+          showAvatar={false}
+        />
+      );
+    }
+
+    return null;
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="arrow-back" size={24} color="#ffffff" />
-        </TouchableOpacity>
-        <View style={styles.headerContent}>
-          {clan?.icon && <Text style={styles.headerIcon}>{clan.icon}</Text>}
-          <Text style={styles.headerTitle}>{clan?.name || 'CLANN'}</Text>
+    <LinearGradient
+      colors={chatTheme.backgroundGradient}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.container}
+    >
+      <SafeAreaView style={styles.safeArea}>
+        {/* Header Premium */}
+        <ChatHeader
+          clan={clan}
+          onBack={() => navigation.goBack()}
+          memberCount={memberCount}
+        />
+
+        {/* Área de mensagens */}
+        <View style={styles.messagesContainer}>
+          {messages.length === 0 && !loading ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateIcon}>💬</Text>
+              <Text style={styles.emptyStateTitle}>Chat do CLANN</Text>
+              <Text style={styles.emptyStateText}>
+                Este é o início do chat do CLANN "{clan?.name || ''}"
+              </Text>
+              <Text style={styles.emptyStateSubtext}>
+                Envie a primeira mensagem para começar a conversa
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              ref={flatListRef}
+              data={groupedMessages}
+              keyExtractor={(item) => item.id?.toString() || `item-${item.timestamp}`}
+              inverted={true}
+              renderItem={renderItem}
+              contentContainerStyle={styles.messagesListContent}
+              showsVerticalScrollIndicator={false}
+              onContentSizeChange={() => {
+                // Scroll automático para última mensagem
+                setTimeout(() => {
+                  flatListRef.current?.scrollToEnd({ animated: true });
+                }, 100);
+              }}
+            />
+          )}
         </View>
-        <View style={styles.backButton} />
-      </View>
 
-      {/* Área de mensagens */}
-      <View style={styles.messagesContainer}>
-        {messages.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateIcon}>💬</Text>
-            <Text style={styles.emptyStateTitle}>Chat do CLANN</Text>
-            <Text style={styles.emptyStateText}>
-              Este é o início do chat do CLANN "{clan?.name || ''}"
-            </Text>
-            <Text style={styles.emptyStateSubtext}>
-              As mensagens serão implementadas no Sprint 4
-            </Text>
-          </View>
-        ) : (
-          <FlatList
-            data={messages}
-            keyExtractor={(item, index) => index.toString()}
-            renderItem={({ item }) => (
-              <View style={styles.messageItem}>
-                <Text style={styles.messageText}>{item.text}</Text>
-              </View>
-            )}
-          />
-        )}
-      </View>
-
-      {/* Campo de digitação */}
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.input}
-          placeholder="Digite uma mensagem..."
-          placeholderTextColor="#666666"
+        {/* Campo de entrada premium */}
+        <MessageInput
           value={messageText}
           onChangeText={setMessageText}
-          multiline
-          editable={false} // Desabilitado até Sprint 4
+          onSend={handleSendMessage}
+          placeholder="Digite uma mensagem…"
         />
-        <TouchableOpacity 
-          style={[styles.sendButton, !messageText.trim() && styles.sendButtonDisabled]}
-          onPress={handleSendMessage}
-          disabled={!messageText.trim()}
-        >
-          <Ionicons name="send" size={20} color="#ffffff" />
-        </TouchableOpacity>
-      </View>
-    </SafeAreaView>
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
   },
-  header: {
-    backgroundColor: '#1a1a1a',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#333333',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerContent: {
+  safeArea: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  headerIcon: {
-    fontSize: 24,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#ffffff',
   },
   messagesContainer: {
     flex: 1,
-    padding: 20,
+  },
+  messagesListContent: {
+    paddingVertical: 8,
   },
   emptyState: {
     flex: 1,
@@ -169,62 +288,20 @@ const styles = StyleSheet.create({
   emptyStateTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#ffffff',
+    color: chatTheme.textPrimary,
     marginBottom: 12,
   },
   emptyStateText: {
     fontSize: 16,
-    color: '#999999',
+    color: chatTheme.textSecondary,
     textAlign: 'center',
     marginBottom: 8,
   },
   emptyStateSubtext: {
     fontSize: 14,
-    color: '#666666',
+    color: chatTheme.textTertiary,
     textAlign: 'center',
     fontStyle: 'italic',
-  },
-  messageItem: {
-    backgroundColor: '#1a1a1a',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  messageText: {
-    color: '#ffffff',
-    fontSize: 16,
-  },
-  inputContainer: {
-    backgroundColor: '#1a1a1a',
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#333333',
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 8,
-  },
-  input: {
-    flex: 1,
-    backgroundColor: '#2a2a2a',
-    borderRadius: 8,
-    padding: 12,
-    color: '#ffffff',
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: '#333333',
-    maxHeight: 100,
-  },
-  sendButton: {
-    backgroundColor: '#4a90e2',
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sendButtonDisabled: {
-    backgroundColor: '#2a2a2a',
-    opacity: 0.5,
   },
 });
 

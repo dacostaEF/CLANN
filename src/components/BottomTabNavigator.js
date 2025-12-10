@@ -2,9 +2,9 @@ import React from 'react';
 import { Text } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import ClanListScreen from '../screens/ClanListScreen';
+import ChatsListScreen from '../screens/ChatsListScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import SettingsScreen from '../screens/SettingsScreen';
-import ClanChatScreen from '../screens/ClanChatScreen';
 
 const Tab = createBottomTabNavigator();
 
@@ -31,7 +31,7 @@ export default function BottomTabNavigator() {
       />
       <Tab.Screen
         name="Chats"
-        component={ClanChatScreen}
+        component={ChatsListScreen}
         options={{
           tabBarLabel: 'Chats',
           tabBarIcon: () => <Text style={{ fontSize: 20 }}>💬</Text>,

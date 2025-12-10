@@ -356,7 +356,6 @@ const styles = StyleSheet.create({
   clanNamePremium: {
     fontSize: 28,
     fontWeight: '800',
-    background: Platform.OS === 'web' ? 'linear-gradient(135deg, #a8d8ff 0%, #6eb6ff 100%)' : undefined,
     color: Platform.OS === 'web' ? 'transparent' : '#a8d8ff',
     textTransform: 'uppercase',
     letterSpacing: 2,
@@ -365,6 +364,7 @@ const styles = StyleSheet.create({
     ...(Platform.OS === 'web' && {
       WebkitBackgroundClip: 'text',
       WebkitTextFillColor: 'transparent',
+      backgroundClip: 'text',
     }),
   },
   iconContainerPremium: {
