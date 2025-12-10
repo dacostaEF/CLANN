@@ -9,21 +9,30 @@ import {
   ScrollView
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRoute } from '@react-navigation/native';
+import { useRoute, useNavigation } from '@react-navigation/native';
 import QRCodeSVG from 'react-native-qrcode-svg';
 import * as Sharing from 'expo-sharing';
 import ClanStorage from '../clans/ClanStorage';
 
 export default function ClanInviteScreen() {
   const route = useRoute();
-  const { clanId } = route.params || {};
+  const navigation = useNavigation();
+  const { clanId, clan: clanFromParams } = route.params || {};
   
-  const [clan, setClan] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [clan, setClan] = useState(clanFromParams || null);
+  const [loading, setLoading] = useState(!clanFromParams);
 
   useEffect(() => {
+    // Se já recebeu o CLANN via params, não precisa buscar
+    if (clanFromParams) {
+      setClan(clanFromParams);
+      setLoading(false);
+      return;
+    }
+    
+    // Caso contrário, tenta buscar no banco (só funciona em mobile)
     loadClanData();
-  }, [clanId]);
+  }, [clanId, clanFromParams]);
 
   const loadClanData = async () => {
     if (!clanId) {
@@ -129,6 +138,13 @@ export default function ClanInviteScreen() {
           onPress={handleShareCode}
         >
           <Text style={styles.shareButtonText}>📤 Compartilhar Código</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.shareButton, styles.chatButton]}
+          onPress={() => navigation.navigate('ClanChat', { clanId: clan.id, clan })}
+        >
+          <Text style={styles.shareButtonText}>💬 Entrar no Chat</Text>
         </TouchableOpacity>
 
         <View style={styles.infoBox}>
@@ -241,6 +257,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 20,
     minWidth: 200,
+  },
+  chatButton: {
+    backgroundColor: '#2a7a2a',
   },
   shareButtonText: {
     color: '#ffffff',

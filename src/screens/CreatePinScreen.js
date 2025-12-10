@@ -21,6 +21,7 @@ import { isBiometryAvailable } from '../security/BiometryManager';
 export default function CreatePinScreen({ navigation }) {
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
+  const [isConfirming, setIsConfirming] = useState(false);
   const [showBiometryOption, setShowBiometryOption] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -34,7 +35,7 @@ export default function CreatePinScreen({ navigation }) {
   };
 
   const handleNumberPress = (number) => {
-    if (confirmPin === '') {
+    if (!isConfirming) {
       // Primeira entrada do PIN
       if (pin.length < 6) {
         setPin(pin + number);
@@ -54,9 +55,9 @@ export default function CreatePinScreen({ navigation }) {
   };
 
   const handleBackspace = () => {
-    if (confirmPin.length > 0) {
+    if (isConfirming && confirmPin.length > 0) {
       setConfirmPin(confirmPin.slice(0, -1));
-    } else if (pin.length > 0) {
+    } else if (!isConfirming && pin.length > 0) {
       setPin(pin.slice(0, -1));
     }
   };
@@ -117,6 +118,7 @@ export default function CreatePinScreen({ navigation }) {
       Alert.alert('Erro', 'Os PINs não coincidem. Tente novamente.');
       setPin('');
       setConfirmPin('');
+      setIsConfirming(false);
       return;
     }
 
@@ -204,23 +206,29 @@ export default function CreatePinScreen({ navigation }) {
           <View style={styles.header}>
             <Ionicons name="lock-closed" size={64} color="#4a90e2" />
             <Text style={styles.title}>
-              {confirmPin === '' ? 'Crie seu PIN' : 'Confirme seu PIN'}
+              {!isConfirming ? 'Crie seu PIN' : 'Confirme seu PIN'}
             </Text>
             <Text style={styles.subtitle}>
-              {confirmPin === ''
+              {!isConfirming
                 ? 'Digite um PIN de 4 a 6 dígitos para proteger seu Totem'
                 : 'Digite o mesmo PIN novamente para confirmar'}
             </Text>
           </View>
 
           <View style={styles.pinSection}>
-            {confirmPin === '' ? (
+            {!isConfirming ? (
               <>
                 {renderPinDots(pin)}
                 {pin.length >= 4 && (
                   <TouchableOpacity
                     style={styles.continueButton}
-                    onPress={() => setConfirmPin('')}
+                    onPress={() => {
+                      console.log('Botão Continuar clicado, PIN atual:', pin);
+                      // Inicia a fase de confirmação
+                      setIsConfirming(true);
+                      setConfirmPin('');
+                    }}
+                    disabled={loading}
                   >
                     <Text style={styles.continueButtonText}>Continuar</Text>
                   </TouchableOpacity>
@@ -236,6 +244,7 @@ export default function CreatePinScreen({ navigation }) {
                   <TouchableOpacity
                     style={styles.confirmButton}
                     onPress={handleConfirm}
+                    disabled={loading}
                   >
                     <Text style={styles.confirmButtonText}>Confirmar</Text>
                   </TouchableOpacity>

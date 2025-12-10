@@ -25,6 +25,7 @@ import CreateClanScreen from './src/screens/CreateClanScreen';
 import JoinClanScreen from './src/screens/JoinClanScreen';
 import ClanInviteScreen from './src/screens/ClanInviteScreen';
 import ClanDetailScreen from './src/screens/ClanDetailScreen';
+import ClanChatScreen from './src/screens/ClanChatScreen';
 import BottomTabNavigator from './src/components/BottomTabNavigator';
 
 // Segurança
@@ -88,6 +89,7 @@ export default function App() {
                 <Stack.Screen name="JoinClan" component={JoinClanScreen} />
                 <Stack.Screen name="ClanInvite" component={ClanInviteScreen} />
                 <Stack.Screen name="ClanDetail" component={ClanDetailScreen} />
+                <Stack.Screen name="ClanChat" component={ClanChatScreen} />
 
                 {/* Segurança */}
                 <Stack.Screen name="ExportIdentity" component={ExportIdentityScreen} />

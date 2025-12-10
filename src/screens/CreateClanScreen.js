@@ -6,17 +6,37 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  Alert
+  Alert,
+  Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import ClanIconPicker from '../components/ClanIconPicker';
 import ClanManager from '../clans/ClanManager';
 import { DEFAULT_CLAN_ICONS } from '../config/ClanTypes';
-import { getCurrentTotemId } from '../crypto/totemStorage';
+import { useTotem } from '../context/TotemContext';
+
+// Helper para Alert que funciona na Web
+const showAlert = (title, message, buttons) => {
+  if (Platform.OS === 'web') {
+    // Na Web, usar window.alert como fallback
+    const result = window.confirm(`${title}\n\n${message}`);
+    if (result && buttons && buttons[0] && buttons[0].onPress) {
+      buttons[0].onPress();
+    } else if (buttons && buttons.find(b => b.text === 'OK' || b.style === 'cancel')) {
+      const okButton = buttons.find(b => b.text === 'OK' || b.style === 'cancel');
+      if (okButton && okButton.onPress) {
+        okButton.onPress();
+      }
+    }
+  } else {
+    Alert.alert(title, message, buttons);
+  }
+};
 
 export default function CreateClanScreen() {
   const navigation = useNavigation();
+  const { totem } = useTotem();
   const [loading, setLoading] = useState(false);
   
   const [form, setForm] = useState({
@@ -33,22 +53,48 @@ export default function CreateClanScreen() {
   };
 
   const handleCreateClan = async () => {
+    console.log('🟢 handleCreateClan CHAMADO!');
+    console.log('🟢 Form:', form);
+    
     if (!form.name.trim()) {
-      Alert.alert('Erro', 'Digite um nome para o CLANN');
+      console.log('🟡 Nome vazio!');
+      showAlert('Erro', 'Digite um nome para o CLANN');
       return;
     }
 
+    console.log('🟢 Iniciando loading...');
     setLoading(true);
     
     try {
-      // TODO: Obter totemId real a partir do TotemContext
-      const creatorTotemId = await getCurrentTotemId();
+      console.log('🔵 Iniciando criação de CLANN...');
       
-      const canCreate = await ClanManager.canCreateClan(creatorTotemId);
-      if (!canCreate.canCreate) {
-        Alert.alert('Limite atingido', canCreate.reason);
+      // Obter totemId do context
+      const creatorTotemId = totem?.totemId;
+      console.log('🔵 Totem do context:', totem ? 'OK' : 'NULL');
+      console.log('🔵 Totem ID:', creatorTotemId || 'NULL');
+      
+      if (!creatorTotemId) {
+        showAlert('Erro', 'Totem não encontrado. Por favor, gere um Totem primeiro.');
+        setLoading(false);
         return;
       }
+      
+      console.log('🔵 Verificando se pode criar CLANN...');
+      const canCreate = await ClanManager.canCreateClan(creatorTotemId);
+      console.log('🔵 Pode criar?', canCreate);
+      
+      if (!canCreate.canCreate) {
+        showAlert('Limite atingido', canCreate.reason);
+        setLoading(false);
+        return;
+      }
+      
+      console.log('🔵 Criando CLANN...', {
+        name: form.name.trim(),
+        icon: form.icon,
+        description: form.description.trim(),
+        privacy: form.privacy
+      });
       
       const clan = await ClanManager.createClan(
         {
@@ -62,17 +108,29 @@ export default function CreateClanScreen() {
         creatorTotemId
       );
       
-      Alert.alert(
+      console.log('🔵 CLANN criado com sucesso!', clan);
+      
+      showAlert(
         'CLANN Criado!',
         `"${clan.name}" foi criado com sucesso.\nCódigo de convite: ${clan.invite_code}`,
         [
           {
             text: 'Compartilhar Código',
-            onPress: () => navigation.navigate('ClanInvite', { clanId: clan.id })
+            onPress: () => navigation.navigate('ClanInvite', { 
+              clanId: clan.id,
+              clan: clan // Passa o objeto completo para evitar buscar no banco
+            })
           },
           {
             text: 'Ir para CLANN',
-            onPress: () => navigation.navigate('ClanDetail', { clanId: clan.id })
+            onPress: () => navigation.navigate('ClanDetail', { 
+              clanId: clan.id,
+              clan: clan // Passa o objeto completo para evitar buscar no banco
+            })
+          },
+          {
+            text: 'OK',
+            style: 'cancel'
           }
         ]
       );
@@ -87,7 +145,9 @@ export default function CreateClanScreen() {
       });
       
     } catch (error) {
-      Alert.alert('Erro ao criar CLANN', error.message);
+      console.error('❌ Erro ao criar CLANN:', error);
+      console.error('❌ Stack:', error.stack);
+      showAlert('Erro ao criar CLANN', error.message || 'Erro desconhecido');
     } finally {
       setLoading(false);
     }
@@ -215,7 +275,12 @@ export default function CreateClanScreen() {
             styles.createButton,
             (!form.name.trim() || loading) && styles.createButtonDisabled
           ]}
-          onPress={handleCreateClan}
+          onPress={() => {
+            console.log('🟢 BOTÃO CLICADO!');
+            console.log('🟢 Form name:', form.name);
+            console.log('🟢 Loading:', loading);
+            handleCreateClan();
+          }}
           disabled={!form.name.trim() || loading}
         >
           <Text style={styles.createButtonText}>

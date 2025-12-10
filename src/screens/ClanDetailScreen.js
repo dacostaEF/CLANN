@@ -7,13 +7,22 @@ import { getCurrentTotemId } from '../crypto/totemStorage';
 export default function ClanDetailScreen() {
   const route = useRoute();
   const navigation = useNavigation();
-  const { clanId } = route.params;
+  const { clanId, clan: clanFromParams } = route.params || {};
 
-  const [clan, setClan] = useState(null);
+  const [clan, setClan] = useState(clanFromParams || null);
 
   useEffect(() => {
-    loadClan();
-  }, []);
+    // Se já recebeu o CLANN via params, não precisa buscar
+    if (clanFromParams) {
+      setClan(clanFromParams);
+      return;
+    }
+    
+    // Caso contrário, tenta buscar no banco (só funciona em mobile)
+    if (clanId) {
+      loadClan();
+    }
+  }, [clanId, clanFromParams]);
 
   const loadClan = async () => {
     try {
@@ -70,6 +79,13 @@ export default function ClanDetailScreen() {
 
       <Text style={styles.inviteTitle}>Código de Convite</Text>
       <Text style={styles.inviteCode}>{clan.invite_code}</Text>
+
+      <TouchableOpacity 
+        style={[styles.btn, styles.chatBtn]} 
+        onPress={() => navigation.navigate('ClanChat', { clanId: clan.id, clan })}
+      >
+        <Text style={styles.btnText}>💬 Entrar no Chat</Text>
+      </TouchableOpacity>
 
       <TouchableOpacity style={styles.btn} onPress={handleShare}>
         <Text style={styles.btnText}>Compartilhar Convite</Text>
@@ -151,6 +167,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     marginBottom: 12
+  },
+  chatBtn: {
+    backgroundColor: '#2a7a2a'
   },
   leaveBtn: {
     backgroundColor: '#b03030'
