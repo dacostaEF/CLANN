@@ -36,6 +36,9 @@ import SecurityAuditScreen from './src/screens/SecurityAuditScreen';
 import LinkDeviceScreen from './src/screens/LinkDeviceScreen';
 import ScanLinkScreen from './src/screens/ScanLinkScreen';
 
+// Governança (Sprint 7 - Governança - ETAPA 1)
+import GovernanceScreen from './src/screens/GovernanceScreen';
+
 // Banco SQLite
 import ClanStorage from './src/clans/ClanStorage';
 import { initE2E } from './src/security/e2e';
@@ -114,6 +117,9 @@ export default function App() {
                 {/* Multidispositivo (Sprint 7 - ETAPA 1) */}
                 <Stack.Screen name="LinkDevice" component={LinkDeviceScreen} />
                 <Stack.Screen name="ScanLink" component={ScanLinkScreen} />
+
+                {/* Governança (Sprint 7 - Governança - ETAPA 1) */}
+                <Stack.Screen name="Governance" component={GovernanceScreen} />
 
               </Stack.Navigator>
             </NavigationContainer>

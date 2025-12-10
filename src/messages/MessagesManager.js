@@ -1,4 +1,5 @@
 import MessagesStorage from './MessagesStorage';
+import ClanStorage from '../clans/ClanStorage';
 import { encryptMessage, decryptMessage, initE2E } from '../security/e2e';
 import ReactionsManager, { AVAILABLE_REACTIONS } from './ReactionsManager';
 import DeliveryManager from './DeliveryManager';
@@ -50,7 +51,8 @@ class MessagesManager {
   // ---------------------------------------------------------
   async addMessage(clanId, authorTotem, text, options = {}) {
     const { selfDestructAt = null, burnAfterRead = false } = options;
-    // Validações
+    
+    // Validações básicas primeiro
     if (!clanId) {
       throw new Error('clanId é obrigatório');
     }
@@ -71,6 +73,35 @@ class MessagesManager {
 
     if (trimmedText.length > 5000) {
       throw new Error('Mensagem não pode exceder 5000 caracteres');
+    }
+
+    // Enforcement: Verifica regras antes de enviar mensagem (Sprint 7 - ETAPA 3)
+    try {
+      const { checkAction, ACTION_TYPES } = await import('../clans/RuleEnforcement');
+      const userRole = await ClanStorage.getUserRole(clanId, authorTotem);
+      
+      const enforcementResult = await checkAction(clanId, ACTION_TYPES.SEND_MESSAGE, {
+        userTotem: authorTotem,
+        userRole: userRole,
+        clanId: clanId,
+        data: {
+          messageText: trimmedText
+        }
+      });
+      
+      if (!enforcementResult.allowed) {
+        const error = new Error(enforcementResult.reason || 'Ação bloqueada por regra ativa');
+        error.violatedRules = enforcementResult.violatedRules;
+        error.enforcementBlocked = true;
+        throw error;
+      }
+    } catch (error) {
+      // Se enforcement falhar, verifica se é erro de bloqueio
+      if (error.enforcementBlocked || error.message.includes('bloqueada') || error.message.includes('proibido')) {
+        throw error; // Re-lança erro de enforcement
+      }
+      // Se for outro erro (ex: módulo não encontrado), continua normalmente
+      console.warn('Enforcement não disponível, continuando sem verificação:', error.message);
     }
 
     // Garantir que está inicializado

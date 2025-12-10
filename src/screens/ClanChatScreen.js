@@ -230,7 +230,26 @@ export default function ClanChatScreen() {
       }
     } catch (error) {
       console.error('Erro ao enviar mensagem:', error);
-      Alert.alert('Erro', 'Não foi possível enviar a mensagem');
+      
+      // Mostra mensagem específica se foi bloqueado por enforcement
+      if (error.enforcementBlocked || error.message.includes('bloqueada') || error.message.includes('proibido')) {
+        Alert.alert(
+          'Ação Bloqueada',
+          error.message || 'Esta ação está bloqueada por uma regra ativa do CLANN.',
+          [
+            {
+              text: 'Ver Regras',
+              onPress: () => {
+                // Navegar para tela de governança se disponível
+                navigation.navigate('Governance', { clanId: clan.id, clan });
+              }
+            },
+            { text: 'OK' }
+          ]
+        );
+      } else {
+        Alert.alert('Erro', 'Não foi possível enviar a mensagem');
+      }
     }
   };
 

@@ -87,6 +87,13 @@ export default function ClanDetailScreen() {
         <Text style={styles.btnText}>💬 Entrar no Chat</Text>
       </TouchableOpacity>
 
+      <TouchableOpacity 
+        style={[styles.btn, styles.governanceBtn]} 
+        onPress={() => navigation.navigate('Governance', { clanId: clan.id, clan })}
+      >
+        <Text style={styles.btnText}>🛡️ Governança</Text>
+      </TouchableOpacity>
+
       <TouchableOpacity style={styles.btn} onPress={handleShare}>
         <Text style={styles.btnText}>Compartilhar Convite</Text>
       </TouchableOpacity>
@@ -170,6 +177,9 @@ const styles = StyleSheet.create({
   },
   chatBtn: {
     backgroundColor: '#2a7a2a'
+  },
+  governanceBtn: {
+    backgroundColor: '#6C63FF'
   },
   leaveBtn: {
     backgroundColor: '#b03030'

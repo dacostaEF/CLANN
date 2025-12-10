@@ -14,6 +14,9 @@ const WEB_CLAN_MEMBERS_KEY = 'clann_clan_members';
 const WEB_MESSAGES_KEY = 'clann_messages';
 const WEB_LINKED_DEVICES_KEY = 'clann_linked_devices';
 const WEB_SECURITY_LOG_KEY = 'clann_security_log';
+const WEB_CLAN_RULES_KEY = 'clann_clan_rules';
+const WEB_CLAN_COUNCIL_KEY = 'clann_clan_council';
+const WEB_PENDING_APPROVALS_KEY = 'clann_pending_approvals';
 
 class ClanStorage {
   constructor() {
@@ -119,6 +122,63 @@ class ClanStorage {
       localStorage.setItem(WEB_SECURITY_LOG_KEY, JSON.stringify(logs));
     } catch (error) {
       console.error('Erro ao salvar log de segurança no localStorage:', error);
+    }
+  }
+
+  _getWebRules() {
+    if (Platform.OS !== 'web') return [];
+    try {
+      const data = localStorage.getItem(WEB_CLAN_RULES_KEY);
+      return data ? JSON.parse(data) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  _saveWebRules(rules) {
+    if (Platform.OS !== 'web') return;
+    try {
+      localStorage.setItem(WEB_CLAN_RULES_KEY, JSON.stringify(rules));
+    } catch (error) {
+      console.error('Erro ao salvar regras no localStorage:', error);
+    }
+  }
+
+  _getWebCouncil() {
+    if (Platform.OS !== 'web') return [];
+    try {
+      const data = localStorage.getItem(WEB_CLAN_COUNCIL_KEY);
+      return data ? JSON.parse(data) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  _saveWebCouncil(council) {
+    if (Platform.OS !== 'web') return;
+    try {
+      localStorage.setItem(WEB_CLAN_COUNCIL_KEY, JSON.stringify(council));
+    } catch (error) {
+      console.error('Erro ao salvar conselho no localStorage:', error);
+    }
+  }
+
+  _getWebPendingApprovals() {
+    if (Platform.OS !== 'web') return [];
+    try {
+      const data = localStorage.getItem(WEB_PENDING_APPROVALS_KEY);
+      return data ? JSON.parse(data) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  _saveWebPendingApprovals(approvals) {
+    if (Platform.OS !== 'web') return;
+    try {
+      localStorage.setItem(WEB_PENDING_APPROVALS_KEY, JSON.stringify(approvals));
+    } catch (error) {
+      console.error('Erro ao salvar aprovações pendentes no localStorage:', error);
     }
   }
 
@@ -300,6 +360,124 @@ class ClanStorage {
         );
         tx.executeSql(
           `CREATE INDEX IF NOT EXISTS idx_security_log_actor ON security_log(actor_totem);`
+        );
+
+        // Tabela de regras do CLANN (Sprint 7 - Governança - ETAPA 1)
+        tx.executeSql(
+          `CREATE TABLE IF NOT EXISTS clan_rules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            clan_id INTEGER NOT NULL,
+            rule_id TEXT NOT NULL,
+            text TEXT NOT NULL,
+            enabled INTEGER DEFAULT 1,
+            version INTEGER DEFAULT 1,
+            created_at INTEGER NOT NULL,
+            approved_by TEXT,
+            category TEXT,
+            template_id TEXT,
+            FOREIGN KEY (clan_id) REFERENCES clans(id)
+          );`
+        );
+
+        // Adicionar colunas de categoria e template (ETAPA 2 - Migration)
+        tx.executeSql(
+          `ALTER TABLE clan_rules ADD COLUMN category TEXT;`,
+          [],
+          () => {},
+          () => {} // Ignora erro se coluna já existe
+        );
+        tx.executeSql(
+          `ALTER TABLE clan_rules ADD COLUMN template_id TEXT;`,
+          [],
+          () => {},
+          () => {} // Ignora erro se coluna já existe
+        );
+
+        // Tabela de templates de regras (Sprint 7 - Governança - ETAPA 2)
+        tx.executeSql(
+          `CREATE TABLE IF NOT EXISTS rule_templates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            template_id TEXT UNIQUE NOT NULL,
+            name TEXT NOT NULL,
+            text TEXT NOT NULL,
+            category TEXT,
+            description TEXT,
+            created_at INTEGER NOT NULL
+          );`
+        );
+
+        // Tabela de histórico de versões das regras (Sprint 7 - Governança - ETAPA 2)
+        tx.executeSql(
+          `CREATE TABLE IF NOT EXISTS rule_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            rule_id TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            text TEXT NOT NULL,
+            changed_by TEXT,
+            changed_at INTEGER NOT NULL,
+            change_type TEXT,
+            FOREIGN KEY (rule_id) REFERENCES clan_rules(rule_id)
+          );`
+        );
+
+        // Índices para performance
+        tx.executeSql(
+          `CREATE INDEX IF NOT EXISTS idx_rule_history_rule_id ON rule_history(rule_id);`
+        );
+        tx.executeSql(
+          `CREATE INDEX IF NOT EXISTS idx_clan_rules_category ON clan_rules(category);`
+        );
+
+        // Tabela de conselho de anciões (Sprint 7 - Governança - ETAPA 1)
+        tx.executeSql(
+          `CREATE TABLE IF NOT EXISTS clan_council (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            clan_id INTEGER NOT NULL UNIQUE,
+            founder_totem TEXT NOT NULL,
+            elders TEXT,
+            approvals_required INTEGER DEFAULT 2,
+            FOREIGN KEY (clan_id) REFERENCES clans(id)
+          );`
+        );
+
+        // Tabela de aprovações pendentes (Sprint 7 - Governança - ETAPA 4)
+        tx.executeSql(
+          `CREATE TABLE IF NOT EXISTS pending_approvals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            clan_id INTEGER NOT NULL,
+            action_type TEXT NOT NULL,
+            action_data TEXT,
+            requested_by TEXT NOT NULL,
+            approvals TEXT,
+            rejections TEXT,
+            status TEXT DEFAULT 'pending',
+            created_at INTEGER NOT NULL,
+            executed INTEGER DEFAULT 0,
+            executed_at INTEGER,
+            FOREIGN KEY (clan_id) REFERENCES clans(id)
+          );`
+        );
+
+        // Adiciona colunas de execução se não existirem (migração)
+        tx.executeSql(
+          `ALTER TABLE pending_approvals ADD COLUMN executed INTEGER DEFAULT 0;`,
+          [],
+          () => {},
+          () => {} // Ignora erro se coluna já existe
+        );
+        tx.executeSql(
+          `ALTER TABLE pending_approvals ADD COLUMN executed_at INTEGER;`,
+          [],
+          () => {},
+          () => {} // Ignora erro se coluna já existe
+        );
+
+        // Índices para performance
+        tx.executeSql(
+          `CREATE INDEX IF NOT EXISTS idx_clan_rules_clan_id ON clan_rules(clan_id);`
+        );
+        tx.executeSql(
+          `CREATE INDEX IF NOT EXISTS idx_pending_approvals_clan_id ON pending_approvals(clan_id);`
         );
 
       },
@@ -812,6 +990,80 @@ class ClanStorage {
         totalEvents: 0
       };
     }
+  }
+
+  /**
+   * Obtém regras do CLANN (para RulesEngine)
+   * @returns {Array} Lista de regras
+   */
+  getWebRules() {
+    return this._getWebRules();
+  }
+
+  /**
+   * Salva regras do CLANN (para RulesEngine)
+   * @param {Array} rules - Lista de regras
+   */
+  saveWebRules(rules) {
+    this._saveWebRules(rules);
+  }
+
+  getWebCouncils() {
+    return this._getWebCouncil();
+  }
+
+  saveWebCouncils(councils) {
+    this._saveWebCouncil(councils);
+  }
+
+  getWebMembers() {
+    return this._getWebMembers();
+  }
+
+  saveWebMembers(members) {
+    this._saveWebMembers(members);
+  }
+
+  getWebClans() {
+    return this._getWebClans();
+  }
+
+  saveWebClans(clans) {
+    this._saveWebClans(clans);
+  }
+
+  /**
+   * Obtém o role do usuário em um CLANN específico
+   * @param {number} clanId - ID do CLANN
+   * @param {string} totemId - ID do Totem
+   * @returns {Promise<string|null>} Role do usuário ou null se não for membro
+   */
+  async getUserRole(clanId, totemId) {
+    if (Platform.OS === 'web' || !this.db) {
+      // Na Web, busca no localStorage
+      const members = this._getWebMembers();
+      const member = members.find(
+        m => m.clan_id === parseInt(clanId) && m.totem_id === totemId
+      );
+      return Promise.resolve(member ? member.role : null);
+    }
+
+    return new Promise((resolve, reject) => {
+      this.db.transaction(tx => {
+        tx.executeSql(
+          `SELECT role FROM clan_members WHERE clan_id = ? AND totem_id = ?;`,
+          [clanId, totemId],
+          (_, { rows }) => {
+            if (rows.length > 0) {
+              resolve(rows.item(0).role);
+            } else {
+              resolve(null);
+            }
+          },
+          (_, err) => reject(err)
+        );
+      });
+    });
   }
 
   // ---------------------------------------------------------
