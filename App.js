@@ -32,9 +32,16 @@ import BottomTabNavigator from './src/components/BottomTabNavigator';
 import ExportIdentityScreen from './src/screens/ExportIdentityScreen';
 import SecurityAuditScreen from './src/screens/SecurityAuditScreen';
 
+// Multidispositivo (Sprint 7 - ETAPA 1)
+import LinkDeviceScreen from './src/screens/LinkDeviceScreen';
+import ScanLinkScreen from './src/screens/ScanLinkScreen';
+
 // Banco SQLite
 import ClanStorage from './src/clans/ClanStorage';
 import { initE2E } from './src/security/e2e';
+
+// Plugins (Sprint 7 - ETAPA 5)
+import { initAllPlugins } from './src/plugins';
 
 // Context Providers
 import { TotemProvider } from './src/context/TotemContext';
@@ -58,6 +65,9 @@ export default function App() {
     initE2E().catch(error => {
       console.error('Erro ao inicializar E2E:', error);
     });
+    
+    // Inicializar sistema de plugins (Sprint 7 - ETAPA 5)
+    initAllPlugins();
   }, []);
 
   return (
@@ -100,6 +110,10 @@ export default function App() {
                 {/* Segurança */}
                 <Stack.Screen name="ExportIdentity" component={ExportIdentityScreen} />
                 <Stack.Screen name="SecurityAudit" component={SecurityAuditScreen} />
+
+                {/* Multidispositivo (Sprint 7 - ETAPA 1) */}
+                <Stack.Screen name="LinkDevice" component={LinkDeviceScreen} />
+                <Stack.Screen name="ScanLink" component={ScanLinkScreen} />
 
               </Stack.Navigator>
             </NavigationContainer>

@@ -12,6 +12,8 @@ if (Platform.OS === 'web') {
 const WEB_CLANS_KEY = 'clann_clans';
 const WEB_CLAN_MEMBERS_KEY = 'clann_clan_members';
 const WEB_MESSAGES_KEY = 'clann_messages';
+const WEB_LINKED_DEVICES_KEY = 'clann_linked_devices';
+const WEB_SECURITY_LOG_KEY = 'clann_security_log';
 
 class ClanStorage {
   constructor() {
@@ -79,6 +81,44 @@ class ClanStorage {
       localStorage.setItem(WEB_MESSAGES_KEY, JSON.stringify(messages));
     } catch (error) {
       console.error('Erro ao salvar mensagens no localStorage:', error);
+    }
+  }
+
+  _getWebLinkedDevices() {
+    if (Platform.OS !== 'web') return [];
+    try {
+      const data = localStorage.getItem(WEB_LINKED_DEVICES_KEY);
+      return data ? JSON.parse(data) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  _saveWebLinkedDevices(devices) {
+    if (Platform.OS !== 'web') return;
+    try {
+      localStorage.setItem(WEB_LINKED_DEVICES_KEY, JSON.stringify(devices));
+    } catch (error) {
+      console.error('Erro ao salvar dispositivos vinculados no localStorage:', error);
+    }
+  }
+
+  _getWebSecurityLog() {
+    if (Platform.OS !== 'web') return [];
+    try {
+      const data = localStorage.getItem(WEB_SECURITY_LOG_KEY);
+      return data ? JSON.parse(data) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  _saveWebSecurityLog(logs) {
+    if (Platform.OS !== 'web') return;
+    try {
+      localStorage.setItem(WEB_SECURITY_LOG_KEY, JSON.stringify(logs));
+    } catch (error) {
+      console.error('Erro ao salvar log de segurança no localStorage:', error);
     }
   }
 
@@ -224,6 +264,42 @@ class ClanStorage {
         // Índice para performance nas queries de mensagens
         tx.executeSql(
           `CREATE INDEX IF NOT EXISTS idx_messages_clan_id ON clan_messages(clan_id);`
+        );
+
+        // Tabela de dispositivos vinculados (Sprint 7 - ETAPA 1)
+        tx.executeSql(
+          `CREATE TABLE IF NOT EXISTS linked_devices (
+            device_id TEXT PRIMARY KEY,
+            totem_id TEXT NOT NULL,
+            public_key TEXT NOT NULL,
+            linked_at INTEGER NOT NULL
+          );`
+        );
+
+        // Índice para performance nas queries de dispositivos
+        tx.executeSql(
+          `CREATE INDEX IF NOT EXISTS idx_linked_devices_totem_id ON linked_devices(totem_id);`
+        );
+
+        // Tabela de log de segurança com hash-chain (Sprint 7 - ETAPA 3)
+        tx.executeSql(
+          `CREATE TABLE IF NOT EXISTS security_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event TEXT NOT NULL,
+            actor_totem TEXT NOT NULL,
+            timestamp INTEGER NOT NULL,
+            prev_hash TEXT,
+            hash TEXT NOT NULL,
+            details TEXT
+          );`
+        );
+
+        // Índice para performance nas queries de log
+        tx.executeSql(
+          `CREATE INDEX IF NOT EXISTS idx_security_log_timestamp ON security_log(timestamp DESC);`
+        );
+        tx.executeSql(
+          `CREATE INDEX IF NOT EXISTS idx_security_log_actor ON security_log(actor_totem);`
         );
 
       },
@@ -503,6 +579,239 @@ class ClanStorage {
 
       });
     });
+  }
+
+  // ---------------------------------------------------------
+  // Dispositivos Vinculados (Sprint 7 - ETAPA 1)
+  // ---------------------------------------------------------
+  
+  /**
+   * Adiciona um dispositivo vinculado
+   * @param {string} deviceId - ID único do dispositivo
+   * @param {string} totemId - ID do Totem
+   * @param {string} publicKey - Chave pública do dispositivo
+   * @returns {Promise<void>}
+   */
+  async addLinkedDevice(deviceId, totemId, publicKey) {
+    if (Platform.OS === 'web' || !this.db) {
+      // Na Web, salva no localStorage
+      const devices = this._getWebLinkedDevices();
+      devices.push({
+        device_id: deviceId,
+        totem_id: totemId,
+        public_key: publicKey,
+        linked_at: Date.now()
+      });
+      this._saveWebLinkedDevices(devices);
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve, reject) => {
+      this.db.transaction(tx => {
+        tx.executeSql(
+          `INSERT OR REPLACE INTO linked_devices (device_id, totem_id, public_key, linked_at)
+           VALUES (?, ?, ?, ?);`,
+          [deviceId, totemId, publicKey, Date.now()],
+          () => resolve(),
+          (_, err) => reject(err)
+        );
+      });
+    });
+  }
+
+  /**
+   * Busca dispositivos vinculados a um Totem
+   * @param {string} totemId - ID do Totem
+   * @returns {Promise<Array>}
+   */
+  async getLinkedDevices(totemId) {
+    if (Platform.OS === 'web' || !this.db) {
+      // Na Web, busca no localStorage
+      const devices = this._getWebLinkedDevices();
+      return Promise.resolve(devices.filter(d => d.totem_id === totemId));
+    }
+
+    return new Promise((resolve, reject) => {
+      this.db.transaction(tx => {
+        tx.executeSql(
+          `SELECT * FROM linked_devices WHERE totem_id = ? ORDER BY linked_at DESC;`,
+          [totemId],
+          (_, { rows }) => resolve(rows._array),
+          (_, err) => reject(err)
+        );
+      });
+    });
+  }
+
+  /**
+   * Remove um dispositivo vinculado
+   * @param {string} deviceId - ID do dispositivo
+   * @returns {Promise<void>}
+   */
+  async removeLinkedDevice(deviceId) {
+    if (Platform.OS === 'web' || !this.db) {
+      // Na Web, remove do localStorage
+      const devices = this._getWebLinkedDevices();
+      const filtered = devices.filter(d => d.device_id !== deviceId);
+      this._saveWebLinkedDevices(filtered);
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve, reject) => {
+      this.db.transaction(tx => {
+        tx.executeSql(
+          `DELETE FROM linked_devices WHERE device_id = ?;`,
+          [deviceId],
+          () => resolve(),
+          (_, err) => reject(err)
+        );
+      });
+    });
+  }
+
+  // ---------------------------------------------------------
+  // Security Log - Hash-Chain (Sprint 7 - ETAPA 3)
+  // ---------------------------------------------------------
+
+  /**
+   * Adiciona um evento ao log de segurança com hash-chain
+   * @param {string} event - Tipo de evento
+   * @param {string} actorTotem - Totem que executou a ação
+   * @param {string} details - Detalhes adicionais (JSON string)
+   * @param {string} hash - Hash calculado (gerado externamente)
+   * @param {string} prevHash - Hash do evento anterior
+   * @returns {Promise<number>} ID do evento registrado
+   */
+  async addSecurityLogEvent(event, actorTotem, hash, prevHash = null, details = null) {
+    if (Platform.OS === 'web' || !this.db) {
+      // Na Web, salva no localStorage
+      const logs = this._getWebSecurityLog();
+      const newLog = {
+        id: Date.now(),
+        event,
+        actor_totem: actorTotem,
+        timestamp: Date.now(),
+        prev_hash: prevHash,
+        hash,
+        details
+      };
+      logs.push(newLog);
+      this._saveWebSecurityLog(logs);
+      return Promise.resolve(newLog.id);
+    }
+
+    return new Promise((resolve, reject) => {
+      this.db.transaction(tx => {
+        tx.executeSql(
+          `INSERT INTO security_log (event, actor_totem, timestamp, prev_hash, hash, details)
+           VALUES (?, ?, ?, ?, ?, ?);`,
+          [event, actorTotem, Date.now(), prevHash, hash, details],
+          (_, result) => resolve(result.insertId),
+          (_, err) => reject(err)
+        );
+      });
+    });
+  }
+
+  /**
+   * Busca o último evento do log (para obter prev_hash)
+   * @returns {Promise<Object|null>} Último evento ou null
+   */
+  async getLastSecurityLogEvent() {
+    if (Platform.OS === 'web' || !this.db) {
+      // Na Web, busca no localStorage
+      const logs = this._getWebSecurityLog();
+      if (logs.length === 0) return null;
+      
+      // Ordena por timestamp e retorna o último
+      const sorted = logs.sort((a, b) => b.timestamp - a.timestamp);
+      return sorted[0];
+    }
+
+    return new Promise((resolve, reject) => {
+      this.db.transaction(tx => {
+        tx.executeSql(
+          `SELECT * FROM security_log ORDER BY timestamp DESC LIMIT 1;`,
+          [],
+          (_, { rows }) => {
+            if (rows.length > 0) {
+              resolve(rows.item(0));
+            } else {
+              resolve(null);
+            }
+          },
+          (_, err) => reject(err)
+        );
+      });
+    });
+  }
+
+  /**
+   * Busca eventos do log de segurança
+   * @param {number} limit - Limite de eventos (padrão: 100)
+   * @param {number} offset - Offset para paginação
+   * @returns {Promise<Array>} Lista de eventos
+   */
+  async getSecurityLogEvents(limit = 100, offset = 0) {
+    if (Platform.OS === 'web' || !this.db) {
+      // Na Web, busca no localStorage
+      const logs = this._getWebSecurityLog();
+      const sorted = logs.sort((a, b) => b.timestamp - a.timestamp);
+      return Promise.resolve(sorted.slice(offset, offset + limit));
+    }
+
+    return new Promise((resolve, reject) => {
+      this.db.transaction(tx => {
+        tx.executeSql(
+          `SELECT * FROM security_log ORDER BY timestamp DESC LIMIT ? OFFSET ?;`,
+          [limit, offset],
+          (_, { rows }) => resolve(rows._array),
+          (_, err) => reject(err)
+        );
+      });
+    });
+  }
+
+  /**
+   * Verifica integridade da hash-chain
+   * @returns {Promise<Object>} Resultado da verificação
+   */
+  async verifySecurityLogIntegrity() {
+    try {
+      const events = await this.getSecurityLogEvents(1000, 0);
+      
+      if (events.length === 0) {
+        return { valid: true, errors: [] };
+      }
+
+      const errors = [];
+      
+      // Verifica cada evento em relação ao anterior
+      for (let i = 0; i < events.length - 1; i++) {
+        const current = events[i];
+        const next = events[i + 1];
+        
+        // O hash do próximo evento deve corresponder ao prev_hash
+        if (next.prev_hash !== current.hash) {
+          errors.push({
+            eventId: next.id,
+            message: `Hash mismatch: expected ${current.hash}, got ${next.prev_hash}`
+          });
+        }
+      }
+
+      return {
+        valid: errors.length === 0,
+        errors,
+        totalEvents: events.length
+      };
+    } catch (error) {
+      return {
+        valid: false,
+        errors: [{ message: `Erro ao verificar integridade: ${error.message}` }],
+        totalEvents: 0
+      };
+    }
   }
 
   // ---------------------------------------------------------

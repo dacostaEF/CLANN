@@ -1,15 +1,21 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   Alert,
-  ScrollView
+  ScrollView,
+  ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import { activate as activatePanicMode } from '../security/panicMode';
 
 export default function SettingsScreen() {
+  const navigation = useNavigation();
+  const [panicLoading, setPanicLoading] = useState(false);
+
   const handleThemeChange = () => {
     Alert.alert('Tema', 'Funcionalidade em desenvolvimento');
   };
@@ -18,12 +24,93 @@ export default function SettingsScreen() {
     Alert.alert('Idioma', 'Funcionalidade em desenvolvimento');
   };
 
+  const handleLinkDevice = () => {
+    navigation.navigate('LinkDevice');
+  };
+
+  const handleScanLink = () => {
+    navigation.navigate('ScanLink');
+  };
+
   const handleAbout = () => {
     Alert.alert('Sobre o App', 'CLANN App v1.0.0\n\nAplicativo de gerenciamento de CLANNs');
   };
 
   const handlePrivacyPolicy = () => {
     Alert.alert('Política de Privacidade', 'Funcionalidade em desenvolvimento');
+  };
+
+  const handlePanicMode = () => {
+    Alert.alert(
+      '🚨 MODO PANIC',
+      'ATENÇÃO: Esta ação irá:\n\n' +
+      '• Apagar todas as mensagens locais\n' +
+      '• Apagar todas as chaves de criptografia\n' +
+      '• Desvincular todos os dispositivos\n' +
+      '• Deslogar você do aplicativo\n' +
+      '• Ativar PIN de emergência\n\n' +
+      'Esta ação NÃO PODE ser desfeita!\n\n' +
+      'Deseja continuar?',
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel'
+        },
+        {
+          text: 'ATIVAR PANIC',
+          style: 'destructive',
+          onPress: async () => {
+            // Confirmação final
+            Alert.alert(
+              '⚠️ ÚLTIMA CONFIRMAÇÃO',
+              'Você tem CERTEZA que deseja ativar o Modo PANIC?\n\n' +
+              'Todos os dados locais serão PERMANENTEMENTE apagados.',
+              [
+                {
+                  text: 'Cancelar',
+                  style: 'cancel'
+                },
+                {
+                  text: 'SIM, ATIVAR',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      setPanicLoading(true);
+                      await activatePanicMode();
+                      
+                      Alert.alert(
+                        '✅ Modo PANIC Ativado',
+                        'Todos os dados locais foram apagados.\n\n' +
+                        'O aplicativo será reiniciado.',
+                        [
+                          {
+                            text: 'OK',
+                            onPress: () => {
+                              // Reinicia o app (navega para AuthCheck)
+                              navigation.reset({
+                                index: 0,
+                                routes: [{ name: 'AuthCheck' }],
+                              });
+                            }
+                          }
+                        ]
+                      );
+                    } catch (error) {
+                      Alert.alert(
+                        'Erro',
+                        `Não foi possível ativar o Modo PANIC:\n${error.message}`
+                      );
+                    } finally {
+                      setPanicLoading(false);
+                    }
+                  }
+                }
+              ]
+            );
+          }
+        }
+      ]
+    );
   };
 
   return (
@@ -66,6 +153,65 @@ export default function SettingsScreen() {
               </View>
             </View>
             <Text style={styles.settingArrow}>›</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Dispositivos</Text>
+          
+          <TouchableOpacity
+            style={styles.settingItem}
+            onPress={handleLinkDevice}
+          >
+            <View style={styles.settingLeft}>
+              <Text style={styles.settingIcon}>📱</Text>
+              <View style={styles.settingTextContainer}>
+                <Text style={styles.settingLabel}>Gerar QR de Vinculação</Text>
+                <Text style={styles.settingValue}>Vincular outro dispositivo</Text>
+              </View>
+            </View>
+            <Text style={styles.settingArrow}>›</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.settingItem}
+            onPress={handleScanLink}
+          >
+            <View style={styles.settingLeft}>
+              <Text style={styles.settingIcon}>📷</Text>
+              <View style={styles.settingTextContainer}>
+                <Text style={styles.settingLabel}>Escanear QR Code</Text>
+                <Text style={styles.settingValue}>Vincular este dispositivo</Text>
+              </View>
+            </View>
+            <Text style={styles.settingArrow}>›</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Segurança</Text>
+          
+          <TouchableOpacity
+            style={[styles.settingItem, styles.panicButton]}
+            onLongPress={handlePanicMode}
+            disabled={panicLoading}
+          >
+            <View style={styles.settingLeft}>
+              <Text style={styles.settingIcon}>🚨</Text>
+              <View style={styles.settingTextContainer}>
+                <Text style={styles.settingLabel}>
+                  {panicLoading ? 'Ativando Modo PANIC...' : 'Modo PANIC (Long Press)'}
+                </Text>
+                <Text style={styles.settingValue}>
+                  Autodestruição global de emergência
+                </Text>
+              </View>
+            </View>
+            {panicLoading ? (
+              <ActivityIndicator size="small" color="#FF6B6B" />
+            ) : (
+              <Text style={styles.settingArrow}>›</Text>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -168,6 +314,10 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: '#666666',
     marginLeft: 12,
+  },
+  panicButton: {
+    borderColor: '#FF6B6B',
+    borderWidth: 2,
   },
 });
 

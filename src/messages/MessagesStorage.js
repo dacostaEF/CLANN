@@ -306,6 +306,105 @@ class MessagesStorage {
   }
 
   // ---------------------------------------------------------
+  // Batch Insert - Inserir múltiplas mensagens (Sprint 7 - ETAPA 6)
+  // ---------------------------------------------------------
+  async batchInsertMessages(messages) {
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return Promise.resolve([]);
+    }
+
+    if (Platform.OS === 'web' || !this.db) {
+      // Na Web, salva no localStorage
+      const allMessages = this._getWebMessages();
+      const newMessages = messages.map(msg => ({
+        id: Date.now() + Math.random(), // ID único
+        clan_id: parseInt(msg.clanId),
+        author_totem: msg.authorTotem,
+        message: msg.text,
+        timestamp: msg.timestamp || Date.now(),
+        self_destruct_at: msg.selfDestructAt || null,
+        burn_after_read: msg.burnAfterRead ? 1 : 0,
+        reactions: msg.reactions || null,
+        delivered_to: msg.deliveredTo ? JSON.stringify(msg.deliveredTo) : JSON.stringify([]),
+        read_by: msg.readBy ? JSON.stringify(msg.readBy) : JSON.stringify([]),
+        edited: msg.edited || 0,
+        deleted: msg.deleted || 0,
+        original_content: msg.originalContent || null,
+        edited_at: msg.editedAt || null
+      }));
+      
+      allMessages.push(...newMessages);
+      this._saveWebMessages(allMessages);
+      return Promise.resolve(newMessages);
+    }
+
+    // No SQLite, usa transação única para inserir todas
+    return new Promise((resolve, reject) => {
+      this.db.transaction(tx => {
+        const insertedMessages = [];
+        let insertCount = 0;
+        const totalMessages = messages.length;
+
+        messages.forEach((msg, index) => {
+          tx.executeSql(
+            `INSERT INTO clan_messages (clan_id, author_totem, message, timestamp, self_destruct_at, burn_after_read, reactions, delivered_to, read_by, edited, deleted, original_content, edited_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+            [
+              msg.clanId,
+              msg.authorTotem,
+              msg.text,
+              msg.timestamp || Date.now(),
+              msg.selfDestructAt || null,
+              msg.burnAfterRead ? 1 : 0,
+              msg.reactions || null,
+              msg.deliveredTo ? JSON.stringify(msg.deliveredTo) : JSON.stringify([]),
+              msg.readBy ? JSON.stringify(msg.readBy) : JSON.stringify([]),
+              msg.edited || 0,
+              msg.deleted || 0,
+              msg.originalContent || null,
+              msg.editedAt || null
+            ],
+            (_, result) => {
+              insertedMessages.push({
+                id: result.insertId,
+                clan_id: msg.clanId,
+                author_totem: msg.authorTotem,
+                message: msg.text,
+                timestamp: msg.timestamp || Date.now(),
+                self_destruct_at: msg.selfDestructAt || null,
+                burn_after_read: msg.burnAfterRead ? 1 : 0,
+                reactions: msg.reactions || null,
+                delivered_to: msg.deliveredTo ? JSON.stringify(msg.deliveredTo) : JSON.stringify([]),
+                read_by: msg.readBy ? JSON.stringify(msg.readBy) : JSON.stringify([]),
+                edited: msg.edited || 0,
+                deleted: msg.deleted || 0,
+                original_content: msg.originalContent || null,
+                edited_at: msg.editedAt || null
+              });
+              
+              insertCount++;
+              if (insertCount === totalMessages) {
+                resolve(insertedMessages);
+              }
+            },
+            (_, error) => {
+              console.error(`Erro ao inserir mensagem ${index} no batch:`, error);
+              insertCount++;
+              if (insertCount === totalMessages) {
+                // Retorna o que conseguiu inserir
+                resolve(insertedMessages);
+              }
+            }
+          );
+        });
+      }, (error) => {
+        console.error('Erro na transação batch:', error);
+        reject(error);
+      });
+    });
+  }
+
+  // ---------------------------------------------------------
   // Deletar mensagem fisicamente (para uso interno)
   // ---------------------------------------------------------
   async deleteMessage(messageId) {
@@ -327,6 +426,13 @@ class MessagesStorage {
         );
       });
     });
+  }
+
+  // ---------------------------------------------------------
+  // Obter banco de dados (para uso externo)
+  // ---------------------------------------------------------
+  getDB() {
+    return this.db;
   }
 
   // ---------------------------------------------------------

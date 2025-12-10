@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { chatTheme } from '../../styles/chatTheme';
 import ReactionRow from './ReactionRow';
 import MessageStatus from './MessageStatus';
+import { injectWatermark } from '../../utils/watermark';
 
 /**
  * Bolha de mensagem estilo WhatsApp/Telegram
@@ -36,6 +37,18 @@ export default function MessageBubble({
     return `${hours}:${minutes}`;
   };
 
+  // Aplica watermark invisível ao texto da mensagem (Sprint 7 - ETAPA 2)
+  // Watermark é aplicado apenas na renderização, não altera o conteúdo armazenado
+  const watermarkedMessage = useMemo(() => {
+    if (!message || !currentTotemId || deleted) {
+      return message || '';
+    }
+    
+    // Aplica watermark apenas para mensagens recebidas (para identificar quem vazou)
+    // Mensagens enviadas também podem ter watermark para rastreamento
+    return injectWatermark(message, currentTotemId);
+  }, [message, currentTotemId, deleted]);
+
   return (
     <View style={[
       styles.container,
@@ -61,7 +74,7 @@ export default function MessageBubble({
           isSent ? styles.messageTextSent : styles.messageTextReceived,
           deleted && styles.deletedText
         ]}>
-          {message}
+          {watermarkedMessage}
         </Text>
 
         {/* Timestamp e indicadores */}

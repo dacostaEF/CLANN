@@ -2,6 +2,9 @@ import MessagesStorage from './MessagesStorage';
 import { encryptMessage, decryptMessage, initE2E } from '../security/e2e';
 import ReactionsManager, { AVAILABLE_REACTIONS } from './ReactionsManager';
 import DeliveryManager from './DeliveryManager';
+import { logSecurityEvent, SECURITY_EVENTS } from '../security/SecurityLog';
+import { updateLastMessage } from './MessageCache';
+import { compressText, decompressText } from '../utils/compression';
 
 /**
  * Lógica de negócio para mensagens dos CLANNs
@@ -77,7 +80,9 @@ class MessagesManager {
 
     // Criptografar mensagem antes de salvar (Sprint 6)
     try {
-      const encryptedText = await encryptMessage(parseInt(clanId), trimmedText);
+      // Comprimir texto antes de criptografar (Sprint 7 - ETAPA 6)
+      const compressedText = compressText(trimmedText);
+      const encryptedText = await encryptMessage(parseInt(clanId), compressedText);
       
       // Salvar mensagem criptografada com opções de self-destruct (Sprint 6)
       const message = await this.storage.addMessage(
@@ -86,6 +91,20 @@ class MessagesManager {
         encryptedText,
         { selfDestructAt, burnAfterRead }
       );
+      
+      // Atualizar cache de última mensagem (Sprint 7 - ETAPA 6)
+      try {
+        await updateLastMessage(parseInt(clanId), {
+          message: trimmedText,
+          timestamp: message.timestamp,
+          authorTotem: authorTotem.trim(),
+          edited: false,
+          deleted: false
+        });
+      } catch (cacheError) {
+        console.warn('Erro ao atualizar cache:', cacheError);
+        // Não falha se cache falhar
+      }
       
       // Retornar mensagem com texto descriptografado para uso imediato
       return {
@@ -125,7 +144,9 @@ class MessagesManager {
             // Se não foi deletada, descriptografar normalmente
             if (!isDeleted) {
               try {
-                decryptedText = await decryptMessage(parseInt(clanId), msg.message);
+                const encryptedText = await decryptMessage(parseInt(clanId), msg.message);
+                // Descomprimir texto após descriptografar (Sprint 7 - ETAPA 6)
+                decryptedText = decompressText(encryptedText);
               } catch (error) {
                 decryptedText = '[Mensagem criptografada - não foi possível descriptografar]';
               }
@@ -176,6 +197,19 @@ class MessagesManager {
           }
         })
       );
+      
+      // Atualizar cache com última mensagem (Sprint 7 - ETAPA 6)
+      if (decryptedMessages.length > 0) {
+        try {
+          // Ordena por timestamp e pega a última
+          const sortedMessages = [...decryptedMessages].sort((a, b) => b.timestamp - a.timestamp);
+          const lastMessage = sortedMessages[0];
+          await updateLastMessage(parseInt(clanId), lastMessage);
+        } catch (cacheError) {
+          console.warn('Erro ao atualizar cache:', cacheError);
+          // Não falha se cache falhar
+        }
+      }
       
       return decryptedMessages;
     } catch (error) {
@@ -365,8 +399,9 @@ class MessagesManager {
       // Criar backup do conteúdo original (criptografado)
       const originalContent = message.message;
 
-      // Criptografar novo conteúdo
-      const encryptedNewText = await encryptMessage(parseInt(clanId), newText.trim());
+      // Comprimir e criptografar novo conteúdo (Sprint 7 - ETAPA 6)
+      const compressedNewText = compressText(newText.trim());
+      const encryptedNewText = await encryptMessage(parseInt(clanId), compressedNewText);
 
       // Atualizar mensagem via storage
       await this.storage.updateMessage(messageId, {
@@ -375,6 +410,38 @@ class MessagesManager {
         edited: 1,
         edited_at: Date.now()
       });
+
+      // Atualizar cache se esta for a última mensagem (Sprint 7 - ETAPA 6)
+      try {
+        const allMessages = await this.getMessages(clanId);
+        if (allMessages.length > 0) {
+          const sortedMessages = [...allMessages].sort((a, b) => b.timestamp - a.timestamp);
+          const lastMessage = sortedMessages[0];
+          if (lastMessage.id === messageId) {
+            await updateLastMessage(parseInt(clanId), {
+              message: newText.trim(),
+              timestamp: lastMessage.timestamp,
+              authorTotem: totemId,
+              edited: true,
+              deleted: false
+            });
+          }
+        }
+      } catch (cacheError) {
+        console.warn('Erro ao atualizar cache após edição:', cacheError);
+      }
+
+      // Registra evento de auditoria (Sprint 7 - ETAPA 3)
+      try {
+        await logSecurityEvent(SECURITY_EVENTS.MESSAGE_EDITED, {
+          messageId,
+          clanId,
+          messageLength: newText.trim().length
+        }, totemId);
+      } catch (error) {
+        console.error('Erro ao registrar evento de auditoria:', error);
+        // Não falha a edição se a auditoria falhar
+      }
 
       return true;
     } catch (error) {
@@ -535,6 +602,17 @@ class MessagesManager {
         original_content: null,
         edited: 0
       });
+
+      // Registra evento de auditoria (Sprint 7 - ETAPA 3)
+      try {
+        await logSecurityEvent(SECURITY_EVENTS.MESSAGE_DELETED, {
+          messageId,
+          clanId
+        }, totemId);
+      } catch (error) {
+        console.error('Erro ao registrar evento de auditoria:', error);
+        // Não falha a exclusão se a auditoria falhar
+      }
 
       return true;
     } catch (error) {

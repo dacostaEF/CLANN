@@ -1,5 +1,6 @@
 import ClanStorage from './ClanStorage';
 import { validateClanName, validateClanDescription } from '../config/ClanTypes';
+import { logSecurityEvent, SECURITY_EVENTS } from '../security/SecurityLog';
 
 export default class ClanManager {
   // Cria novo CLANN
@@ -12,7 +13,21 @@ export default class ClanManager {
     if (descError) throw new Error(descError);
     
     // Cria CLANN
-    return await ClanStorage.createClan(clanData, creatorTotemId);
+    const clan = await ClanStorage.createClan(clanData, creatorTotemId);
+    
+    // Registra evento de auditoria (Sprint 7 - ETAPA 3)
+    try {
+      await logSecurityEvent(SECURITY_EVENTS.CLAN_CREATED, {
+        clanId: clan.id,
+        clanName: clan.name,
+        inviteCode: clan.invite_code
+      }, creatorTotemId);
+    } catch (error) {
+      console.error('Erro ao registrar evento de auditoria:', error);
+      // Não falha a criação se a auditoria falhar
+    }
+    
+    return clan;
   }
 
   // Entra em CLANN
@@ -24,7 +39,21 @@ export default class ClanManager {
       throw new Error('Código inválido. Use 6 letras/números.');
     }
     
-    return await ClanStorage.joinClan(normalizedCode, totemId);
+    const clan = await ClanStorage.joinClan(normalizedCode, totemId);
+    
+    // Registra evento de auditoria (Sprint 7 - ETAPA 3)
+    try {
+      await logSecurityEvent(SECURITY_EVENTS.MEMBER_JOINED, {
+        clanId: clan.id,
+        clanName: clan.name,
+        inviteCode: normalizedCode
+      }, totemId);
+    } catch (error) {
+      console.error('Erro ao registrar evento de auditoria:', error);
+      // Não falha o join se a auditoria falhar
+    }
+    
+    return clan;
   }
 
   // Busca CLANN por código
