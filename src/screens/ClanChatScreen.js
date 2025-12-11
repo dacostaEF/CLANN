@@ -47,7 +47,7 @@ export default function ClanChatScreen() {
 
   // Inicialização
   useEffect(() => {
-    // Inicializar MessagesManager
+    // Inicializar MessagesManager (só uma vez)
     MessagesManager.init().catch(error => {
       console.error('Erro ao inicializar MessagesManager:', error);
     });
@@ -56,13 +56,15 @@ export default function ClanChatScreen() {
     const loadTotemIdAndRole = async () => {
       try {
         const totemId = await getCurrentTotemId();
-        setCurrentTotemId(totemId);
-        
-        // Carregar role do usuário no CLANN
-        if (clanId || clanFromParams?.id) {
+        if (totemId) {
+          setCurrentTotemId(prev => prev !== totemId ? totemId : prev);
+          
+          // Carregar role do usuário no CLANN
           const targetClanId = clanId || clanFromParams?.id;
-          const role = await ClanStorage.getUserRole(targetClanId, totemId);
-          setUserRole(role);
+          if (targetClanId) {
+            const role = await ClanStorage.getUserRole(targetClanId, totemId);
+            setUserRole(prev => prev !== role ? role : prev);
+          }
         }
       } catch (error) {
         console.error('Erro ao carregar totemId/role:', error);
@@ -70,24 +72,31 @@ export default function ClanChatScreen() {
     };
     loadTotemIdAndRole();
 
-    // Se já recebeu o CLANN via params, usa diretamente
+    // Se já recebeu o CLANN via params, usa diretamente (só atualiza se for diferente)
     if (clanFromParams) {
-      setClan(clanFromParams);
+      setClan(prevClan => {
+        if (!prevClan || prevClan.id !== clanFromParams.id) {
+          return clanFromParams;
+        }
+        return prevClan;
+      });
       return;
     }
     
-    // Caso contrário, busca no banco
+    // Caso contrário, busca no banco (só se não tiver clan ainda)
     if (clanId) {
       loadClan();
     }
-  }, [clanId, clanFromParams]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clanId, clanFromParams?.id]);
 
   // Carregar mensagens quando o CLANN estiver disponível
   useEffect(() => {
-    if (clan?.id) {
+    if (clan?.id && currentTotemId) {
       loadMessages();
     }
-  }, [clan?.id, loadMessages]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clan?.id, currentTotemId]);
 
   const loadClan = async () => {
     try {
@@ -103,14 +112,14 @@ export default function ClanChatScreen() {
 
   // Atualizar contagem de membros quando o CLANN mudar
   useEffect(() => {
-    if (clan?.members) {
-      setMemberCount(clan.members);
+    if (clan?.members !== undefined) {
+      setMemberCount(prev => prev !== clan.members ? clan.members : prev);
     }
-  }, [clan]);
+  }, [clan?.members]);
 
   // Carregar mensagens
   const loadMessages = useCallback(async () => {
-    if (!clan?.id || !currentTotemId) return;
+    if (!clan?.id || !currentTotemId) return [];
     
     try {
       setLoading(true);
@@ -129,8 +138,10 @@ export default function ClanChatScreen() {
         // Recarregar mensagens para obter status atualizado
         const updatedMsgs = await MessagesManager.getMessages(clan.id);
         setMessages(updatedMsgs);
+        return updatedMsgs;
       } else {
         setMessages(msgs);
+        return msgs;
       }
       
       // Scroll para o final após um pequeno delay
@@ -139,6 +150,7 @@ export default function ClanChatScreen() {
       }, 100);
     } catch (error) {
       console.error('Erro ao carregar mensagens:', error);
+      return [];
     } finally {
       setLoading(false);
     }
@@ -186,31 +198,35 @@ export default function ClanChatScreen() {
       // Parar sync se não houver CLANN ou totemId
       SyncManager.stopSync();
     }
-  }, [clan?.id, currentTotemId, handleIncomingDeltas]);
+  }, [clan?.id, currentTotemId]);
 
   // Recarregar mensagens ao focar na tela
   useFocusEffect(
     useCallback(() => {
       if (clan?.id && currentTotemId) {
-        loadMessages().then(() => {
-          // Marcar todas as mensagens recebidas como lidas ao focar a tela (Sprint 6 - ETAPA 4)
-          const receivedMessageIds = messages
-            .filter(msg => msg.authorTotem !== currentTotemId)
-            .map(msg => msg.id);
-          
-          if (receivedMessageIds.length > 0) {
-            MessagesManager.markMessagesRead(receivedMessageIds, currentTotemId)
-              .then(() => {
-                // Recarregar mensagens para atualizar status
-                loadMessages();
-              })
-              .catch(err => {
-                console.warn('Erro ao marcar mensagens como lidas:', err);
-              });
+        // Carregar mensagens primeiro
+        loadMessages().then((loadedMsgs) => {
+          // Usar apenas mensagens carregadas, não do estado (evita loop)
+          if (loadedMsgs && Array.isArray(loadedMsgs)) {
+            const receivedMessageIds = loadedMsgs
+              .filter(msg => msg.authorTotem !== currentTotemId)
+              .map(msg => msg.id);
+            
+            if (receivedMessageIds.length > 0) {
+              MessagesManager.markMessagesRead(receivedMessageIds, currentTotemId)
+                .then(() => {
+                  // Recarregar mensagens para atualizar status (sem loop)
+                  loadMessages();
+                })
+                .catch(err => {
+                  console.warn('Erro ao marcar mensagens como lidas:', err);
+                });
+            }
           }
         });
       }
-    }, [clan?.id, currentTotemId, loadMessages, messages])
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [clan?.id, currentTotemId])
   );
 
   // Enviar mensagem

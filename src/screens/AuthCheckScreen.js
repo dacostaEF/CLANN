@@ -1,18 +1,22 @@
 import React, { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
-import { hasTotemSecure } from '../crypto/totemStorage';
+import { useNavigation } from '@react-navigation/native';
+import { useTotem } from '../context/TotemContext';
 import { hasPin } from '../security/PinManager';
 
-export default function AuthCheckScreen({ navigation }) {
+export default function AuthCheckScreen() {
+  const navigation = useNavigation();
+  const { totem, loading: totemLoading } = useTotem();
 
   useEffect(() => {
+    if (totemLoading) return;
+
     const checkAuth = async () => {
       try {
-        const hasTotem = await hasTotemSecure();
         const hasPinConfigured = await hasPin();
 
         // 1. Sem Totem → fluxo inicial
-        if (!hasTotem) {
+        if (!totem) {
           navigation.replace('Welcome');
           return;
         }
@@ -33,7 +37,7 @@ export default function AuthCheckScreen({ navigation }) {
     };
 
     checkAuth();
-  }, []);
+  }, [totemLoading, totem, navigation]);
 
   return (
     <View style={styles.container}>

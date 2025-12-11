@@ -1,4 +1,7 @@
 import { Platform } from 'react-native';
+import { loadTotemSecure } from '../storage/secureStore';
+import ClanStorage from '../clans/ClanStorage';
+import MessagesStorage from '../messages/MessagesStorage';
 
 // Polyfill para web usando localStorage
 let SecureStore;
@@ -58,8 +61,11 @@ export async function loadTotem() {
  * @returns {string|null}
  */
 export async function getCurrentTotemId() {
-  const totem = await loadTotem();
-  return totem?.totemId || null;
+  const stored = await loadTotemSecure();
+  if (!stored || !stored.totemId) {
+    return null;
+  }
+  return stored.totemId;
 }
 
 /**
@@ -80,6 +86,94 @@ export async function clearTotem() {
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Obtém estatísticas do Totem (somente leitura)
+ * @returns {Promise<Object>} Estatísticas do Totem
+ */
+export async function getTotemStats() {
+  try {
+    // Carrega Totem para obter createdAt
+    const totem = await loadTotemSecure();
+    if (!totem || !totem.totemId) {
+      return {
+        createdAt: null,
+        clannsCreated: 0,
+        clannsJoined: 0,
+        messagesSent: 0
+      };
+    }
+
+    const totemId = totem.totemId;
+    const createdAt = totem.createdAt || null;
+
+    // Conta CLANNs criados e participando
+    const userClans = await ClanStorage.getUserClans(totemId);
+    
+    const clannsCreated = userClans.filter(clan => clan.role === 'founder').length;
+    const clannsJoined = userClans.length;
+
+    // Conta mensagens enviadas pelo totemId
+    let messagesSent = 0;
+    
+    try {
+      if (Platform.OS === 'web') {
+        // Na Web, busca no localStorage diretamente
+        try {
+          const WEB_MESSAGES_KEY = 'clann_messages';
+          const data = localStorage.getItem(WEB_MESSAGES_KEY);
+          if (data) {
+            const allMessages = JSON.parse(data);
+            messagesSent = allMessages.filter(msg => msg.author_totem === totemId).length;
+          }
+        } catch (error) {
+          console.warn('Erro ao contar mensagens na Web:', error);
+        }
+      } else {
+        // SQLite: conta mensagens por totemId
+        const messagesStorage = new MessagesStorage();
+        await messagesStorage.init();
+        
+        if (messagesStorage.db) {
+          messagesSent = await new Promise((resolve) => {
+            messagesStorage.db.transaction(tx => {
+              tx.executeSql(
+                `SELECT COUNT(*) as count FROM clan_messages WHERE author_totem = ?;`,
+                [totemId],
+                (_, { rows }) => {
+                  const count = rows.length > 0 ? rows.item(0).count : 0;
+                  resolve(count);
+                },
+                (_, error) => {
+                  console.warn('Erro ao contar mensagens:', error);
+                  resolve(0);
+                }
+              );
+            });
+          });
+        }
+      }
+    } catch (error) {
+      console.warn('Erro ao contar mensagens:', error);
+      messagesSent = 0;
+    }
+
+    return {
+      createdAt,
+      clannsCreated,
+      clannsJoined,
+      messagesSent
+    };
+  } catch (error) {
+    console.error('Erro ao obter estatísticas do Totem:', error);
+    return {
+      createdAt: null,
+      clannsCreated: 0,
+      clannsJoined: 0,
+      messagesSent: 0
+    };
   }
 }
 

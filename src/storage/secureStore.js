@@ -81,6 +81,29 @@ export async function hasTotemSecure() {
   }
 }
 
+/**
+ * Obtém lista de dispositivos vinculados (somente leitura)
+ * @returns {Promise<Array>} Lista de dispositivos vinculados
+ */
+export async function getLinkedDevices() {
+  try {
+    const data = await SecureStore.getItemAsync('linked_devices');
+    if (!data) {
+      return [];
+    }
+    const devices = JSON.parse(data);
+    // Garante formato correto: [{ id, name, linkedAt }]
+    return Array.isArray(devices) ? devices.map(device => ({
+      id: device.id || device.device_id || '',
+      name: device.name || 'Dispositivo',
+      linkedAt: device.linkedAt || device.linked_at || ''
+    })) : [];
+  } catch (error) {
+    console.warn('Erro ao ler dispositivos vinculados:', error);
+    return [];
+  }
+}
+
 
 
 
