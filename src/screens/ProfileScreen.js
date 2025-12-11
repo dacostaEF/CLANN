@@ -18,6 +18,8 @@ import * as Clipboard from 'expo-clipboard';
 import { useNavigation } from '@react-navigation/native';
 import { useTotem } from '../context/TotemContext';
 import { getTotemStats } from '../crypto/totemStorage';
+import { loadTotemSecure } from '../storage/secureStore';
+import SecretPhraseModal from '../components/totem/SecretPhraseModal';
 
 export default function ProfileScreen() {
   const navigation = useNavigation();
@@ -30,6 +32,8 @@ export default function ProfileScreen() {
     messagesSent: 0
   });
   const [statsLoading, setStatsLoading] = useState(true);
+  const [showSecretModal, setShowSecretModal] = useState(false);
+  const [secretPhrase, setSecretPhrase] = useState(null);
 
   const handleExportIdentity = () => {
     navigation.navigate('TotemExport');
@@ -43,8 +47,32 @@ export default function ProfileScreen() {
     navigation.navigate('TotemBackup');
   };
 
-  const handleShowRecoveryPhrase = () => {
-    navigation.navigate('TotemSecretPhrase');
+  const handleShowRecoveryPhrase = async () => {
+    try {
+      // Carregar totem completo do SecureStore para obter recoveryPhrase
+      const fullTotem = await loadTotemSecure();
+      if (fullTotem?.recoveryPhrase) {
+        // Converter recoveryPhrase (string) para array de palavras
+        const words = typeof fullTotem.recoveryPhrase === 'string'
+          ? fullTotem.recoveryPhrase.trim().split(/\s+/).filter(w => w.length > 0)
+          : fullTotem.recoveryPhrase;
+        setSecretPhrase(words);
+        setShowSecretModal(true);
+      } else {
+        Alert.alert(
+          'Frase Secreta Não Encontrada',
+          'A frase de recuperação não está disponível para este Totem.',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      console.error('Erro ao carregar frase secreta:', error);
+      Alert.alert(
+        'Erro',
+        'Não foi possível carregar a frase secreta.',
+        [{ text: 'OK' }]
+      );
+    }
   };
 
   const handleCopyTotemId = async () => {
@@ -404,6 +432,13 @@ export default function ProfileScreen() {
         {/* Espaçamento final */}
         <View style={styles.footerSpacer} />
       </ScrollView>
+
+      {/* Modal da Frase Secreta */}
+      <SecretPhraseModal
+        visible={showSecretModal}
+        words={secretPhrase}
+        onClose={() => setShowSecretModal(false)}
+      />
     </SafeAreaView>
   );
 }
