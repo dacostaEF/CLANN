@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,10 +11,37 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { activate as activatePanicMode } from '../security/panicMode';
+import { canUseAdminTools } from '../clans/permissions';
+import { getCurrentTotemId } from '../crypto/totemStorage';
+import ClanStorage from '../clans/ClanStorage';
 
 export default function SettingsScreen() {
   const navigation = useNavigation();
   const [panicLoading, setPanicLoading] = useState(false);
+  const [hasAdminAccess, setHasAdminAccess] = useState(false);
+  
+  // Verificar se tem acesso a admin tools (Sprint 8 - ETAPA 2)
+  useEffect(() => {
+    const checkAdminAccess = async () => {
+      try {
+        const totemId = await getCurrentTotemId();
+        if (!totemId) return;
+        
+        // Verifica se é founder de algum CLANN (acesso a admin tools)
+        const userClans = await ClanStorage.getUserClans(totemId);
+        const isFounder = userClans.some(clan => {
+          const role = clan.role || 'member';
+          return role === 'founder';
+        });
+        
+        setHasAdminAccess(isFounder);
+      } catch (error) {
+        console.error('Erro ao verificar acesso admin:', error);
+      }
+    };
+    
+    checkAdminAccess();
+  }, []);
 
   const handleThemeChange = () => {
     Alert.alert('Tema', 'Funcionalidade em desenvolvimento');
@@ -214,6 +241,37 @@ export default function SettingsScreen() {
             )}
           </TouchableOpacity>
         </View>
+
+        {/* Opções Avançadas - apenas para founders (Sprint 8 - ETAPA 2) */}
+        {hasAdminAccess && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Avançado</Text>
+            
+            <TouchableOpacity
+              style={styles.settingItem}
+              onPress={() => {
+                // Navegar para AdminToolsScreen (Sprint 8 - ETAPA 4)
+                // Precisa de clanId - por enquanto mostra alert
+                Alert.alert(
+                  'Ferramentas Administrativas',
+                  'Acesse as ferramentas administrativas através da tela de Governança de um CLANN que você fundou.',
+                  [{ text: 'OK' }]
+                );
+              }}
+            >
+              <View style={styles.settingLeft}>
+                <Text style={styles.settingIcon}>⚙️</Text>
+                <View style={styles.settingTextContainer}>
+                  <Text style={styles.settingLabel}>Ferramentas Administrativas</Text>
+                  <Text style={styles.settingValue}>
+                    Exportar dados, reset, integridade
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.settingArrow}>›</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Informações</Text>

@@ -76,7 +76,7 @@ export async function executeApprovedAction(approval) {
         throw new Error(`Tipo de ação não suportado: ${action_type}`);
     }
 
-    // Log da execução
+    // Log da execução no SecurityLog (Sprint 8 - ETAPA 5)
     await logSecurityEvent(
       SECURITY_EVENTS.CLAN_UPDATED,
       {
@@ -85,15 +85,69 @@ export async function executeApprovedAction(approval) {
         actionType: action_type,
         clanId: clan_id,
         executedBy: 'system',
+        executedAt: Date.now(),
         result
       },
       requested_by
     );
 
+    // Marca como executado no banco (Sprint 8 - ETAPA 5)
+    const db = ClanStorage.getDB();
+    const executedAt = Date.now();
+    
+    if (Platform.OS === 'web' || !db) {
+      // Web: atualiza localStorage
+      const WEB_PENDING_APPROVALS_KEY = 'clann_pending_approvals';
+      try {
+        const data = localStorage.getItem(WEB_PENDING_APPROVALS_KEY);
+        const approvals = data ? JSON.parse(data) : [];
+        const index = approvals.findIndex(a => a.id === approval.id);
+        if (index !== -1) {
+          approvals[index].executed = true;
+          approvals[index].executed_at = executedAt;
+          approvals[index].status = APPROVAL_STATUS.APPROVED; // Garante status correto
+          localStorage.setItem(WEB_PENDING_APPROVALS_KEY, JSON.stringify(approvals));
+        }
+      } catch (error) {
+        console.error('Erro ao marcar aprovação como executada (web):', error);
+      }
+    } else {
+      // SQLite: atualiza banco
+      return new Promise((resolve, reject) => {
+        db.transaction(tx => {
+          tx.executeSql(
+            `UPDATE pending_approvals 
+             SET executed = 1, executed_at = ?, status = ? 
+             WHERE id = ?;`,
+            [executedAt, APPROVAL_STATUS.APPROVED, approval.id],
+            () => {
+              resolve({
+                success: true,
+                actionType: action_type,
+                result,
+                executedAt
+              });
+            },
+            (_, err) => {
+              console.error('Erro ao marcar aprovação como executada:', err);
+              // Ainda retorna sucesso, pois a ação foi executada
+              resolve({
+                success: true,
+                actionType: action_type,
+                result,
+                executedAt
+              });
+            }
+          );
+        });
+      });
+    }
+
     return {
       success: true,
       actionType: action_type,
-      result
+      result,
+      executedAt
     };
   } catch (error) {
     console.error('Erro ao executar ação aprovada:', error);
@@ -451,17 +505,22 @@ export async function checkAndExecuteApprovedActions(clanId) {
                 rejections: approval.rejections ? JSON.parse(approval.rejections) : []
               };
 
-              await executeApprovedAction(parsedApproval);
+              const executionResult = await executeApprovedAction(parsedApproval);
               
-              // Marca como executado
+              // Marca como executado (já feito dentro de executeApprovedAction, mas garante aqui também)
+              const executedAt = Date.now();
               tx.executeSql(
-                `UPDATE pending_approvals SET executed = 1, executed_at = ? WHERE id = ?;`,
-                [Date.now(), approval.id],
+                `UPDATE pending_approvals SET executed = 1, executed_at = ?, status = ? WHERE id = ?;`,
+                [executedAt, APPROVAL_STATUS.APPROVED, approval.id],
                 () => {},
                 (_, err) => console.error('Erro ao marcar como executado:', err)
               );
 
-              executed.push(approval);
+              executed.push({
+                ...approval,
+                executed: true,
+                executed_at: executedAt
+              });
             } catch (error) {
               console.error(`Erro ao executar aprovação ${approval.id}:`, error);
             }

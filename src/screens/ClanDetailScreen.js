@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Alert, Share } from 'react-na
 import { useRoute, useNavigation } from '@react-navigation/native';
 import ClanStorage from '../clans/ClanStorage';
 import { getCurrentTotemId } from '../crypto/totemStorage';
+import { canViewGovernance } from '../clans/permissions';
 
 export default function ClanDetailScreen() {
   const route = useRoute();
@@ -10,11 +11,26 @@ export default function ClanDetailScreen() {
   const { clanId, clan: clanFromParams } = route.params || {};
 
   const [clan, setClan] = useState(clanFromParams || null);
+  const [userRole, setUserRole] = useState(null);
 
   useEffect(() => {
     // Se já recebeu o CLANN via params, não precisa buscar
     if (clanFromParams) {
       setClan(clanFromParams);
+      
+      // Carregar role do usuário (Sprint 8 - ETAPA 2)
+      const loadRole = async () => {
+        try {
+          const totemId = await getCurrentTotemId();
+          if (clanFromParams?.id && totemId) {
+            const role = await ClanStorage.getUserRole(clanFromParams.id, totemId);
+            setUserRole(role);
+          }
+        } catch (err) {
+          console.error('Erro ao carregar role:', err);
+        }
+      };
+      loadRole();
       return;
     }
     
@@ -28,6 +44,13 @@ export default function ClanDetailScreen() {
     try {
       const data = await ClanStorage.getClanById(clanId);
       setClan(data);
+      
+      // Carregar role do usuário (Sprint 8 - ETAPA 2)
+      const totemId = await getCurrentTotemId();
+      if (data?.id && totemId) {
+        const role = await ClanStorage.getUserRole(data.id, totemId);
+        setUserRole(role);
+      }
     } catch (err) {
       Alert.alert('Erro', 'Não foi possível carregar o CLANN.');
       console.error(err);
@@ -87,12 +110,15 @@ export default function ClanDetailScreen() {
         <Text style={styles.btnText}>💬 Entrar no Chat</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity 
-        style={[styles.btn, styles.governanceBtn]} 
-        onPress={() => navigation.navigate('Governance', { clanId: clan.id, clan })}
-      >
-        <Text style={styles.btnText}>🛡️ Governança</Text>
-      </TouchableOpacity>
+      {/* Botão Governança - apenas se tiver permissão (Sprint 8 - ETAPA 2) */}
+      {canViewGovernance(userRole) && (
+        <TouchableOpacity 
+          style={[styles.btn, styles.governanceBtn]} 
+          onPress={() => navigation.navigate('Governance', { clanId: clan.id, clan })}
+        >
+          <Text style={styles.btnText}>🛡️ Governança</Text>
+        </TouchableOpacity>
+      )}
 
       <TouchableOpacity style={styles.btn} onPress={handleShare}>
         <Text style={styles.btnText}>Compartilhar Convite</Text>

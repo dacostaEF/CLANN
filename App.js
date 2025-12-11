@@ -39,9 +39,19 @@ import ScanLinkScreen from './src/screens/ScanLinkScreen';
 // Governança (Sprint 7 - Governança - ETAPA 1)
 import GovernanceScreen from './src/screens/GovernanceScreen';
 
+// Admin Tools (Sprint 8 - ETAPA 4)
+import AdminToolsScreen from './src/screens/AdminToolsScreen';
+
 // Banco SQLite
 import ClanStorage from './src/clans/ClanStorage';
 import { initE2E } from './src/security/e2e';
+
+// Migrações (Sprint 8 - ETAPA 1)
+import MigrationManager from './src/storage/MigrationManager';
+
+// Segurança Hard (Sprint 8 - ETAPA 3)
+import { init as initDeviceTrust } from './src/security/DeviceTrust';
+import { init as initSessionFortress } from './src/security/SessionFortress';
 
 // Plugins (Sprint 7 - ETAPA 5)
 import { initAllPlugins } from './src/plugins';
@@ -57,12 +67,42 @@ const Stack = createNativeStackNavigator();
 export default function App() {
   
   useEffect(() => {
-    // Inicializar banco SQLite apenas em plataformas nativas (não web)
-    if (Platform.OS !== 'web') {
-      ClanStorage.init().catch(error => {
-        console.error('Erro ao inicializar banco:', error);
+    // Inicializar migrações PRIMEIRO (Sprint 8 - ETAPA 1)
+    // Migrações devem rodar antes de qualquer acesso ao banco
+    MigrationManager.init()
+      .then(() => {
+        console.log('[App] Migrações concluídas');
+        
+        // Inicializar banco SQLite apenas em plataformas nativas (não web)
+        if (Platform.OS !== 'web') {
+          ClanStorage.init().catch(error => {
+            console.error('Erro ao inicializar banco:', error);
+          });
+        }
+        
+        // Inicializar Device Trust (Sprint 8 - ETAPA 3)
+        initDeviceTrust().catch(error => {
+          console.error('Erro ao inicializar Device Trust:', error);
+        });
+        
+        // Inicializar Session Fortress (Sprint 8 - ETAPA 3)
+        initSessionFortress().catch(error => {
+          console.error('Erro ao inicializar Session Fortress:', error);
+        });
+      })
+      .catch(error => {
+        console.error('Erro ao inicializar migrações:', error);
+        // Continua mesmo com erro (fail-open)
+        if (Platform.OS !== 'web') {
+          ClanStorage.init().catch(err => {
+            console.error('Erro ao inicializar banco:', err);
+          });
+        }
+        
+        // Tenta inicializar Device Trust e Session Fortress mesmo com erro de migração
+        initDeviceTrust().catch(err => console.error('Erro ao inicializar Device Trust:', err));
+        initSessionFortress().catch(err => console.error('Erro ao inicializar Session Fortress:', err));
       });
-    }
     
     // Inicializar sistema E2E (Sprint 6)
     initE2E().catch(error => {
@@ -71,6 +111,12 @@ export default function App() {
     
     // Inicializar sistema de plugins (Sprint 7 - ETAPA 5)
     initAllPlugins();
+    
+    // Cleanup: remover listeners ao desmontar
+    return () => {
+      const { removeListeners } = require('./src/security/SessionFortress');
+      removeListeners().catch(err => console.error('Erro ao remover listeners:', err));
+    };
   }, []);
 
   return (
@@ -120,6 +166,9 @@ export default function App() {
 
                 {/* Governança (Sprint 7 - Governança - ETAPA 1) */}
                 <Stack.Screen name="Governance" component={GovernanceScreen} />
+
+                {/* Admin Tools (Sprint 8 - ETAPA 4) */}
+                <Stack.Screen name="AdminTools" component={AdminToolsScreen} />
 
               </Stack.Navigator>
             </NavigationContainer>

@@ -21,6 +21,7 @@ import ReactionPicker from '../components/chat/ReactionPicker';
 import MessageActions from '../components/chat/MessageActions';
 import SyncManager from '../sync/SyncManager';
 import { chatTheme } from '../styles/chatTheme';
+import { canDeleteMessage } from '../clans/permissions';
 
 export default function ClanChatScreen() {
   const route = useRoute();
@@ -31,6 +32,7 @@ export default function ClanChatScreen() {
   const [messages, setMessages] = useState([]);
   const [messageText, setMessageText] = useState('');
   const [currentTotemId, setCurrentTotemId] = useState(null);
+  const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(false);
   const [memberCount, setMemberCount] = useState(0);
   const [selfDestructAt, setSelfDestructAt] = useState(null);
@@ -50,16 +52,23 @@ export default function ClanChatScreen() {
       console.error('Erro ao inicializar MessagesManager:', error);
     });
 
-    // Carregar totemId atual
-    const loadTotemId = async () => {
+    // Carregar totemId atual e role (Sprint 8 - ETAPA 2)
+    const loadTotemIdAndRole = async () => {
       try {
         const totemId = await getCurrentTotemId();
         setCurrentTotemId(totemId);
+        
+        // Carregar role do usuário no CLANN
+        if (clanId || clanFromParams?.id) {
+          const targetClanId = clanId || clanFromParams?.id;
+          const role = await ClanStorage.getUserRole(targetClanId, totemId);
+          setUserRole(role);
+        }
       } catch (error) {
-        console.error('Erro ao carregar totemId:', error);
+        console.error('Erro ao carregar totemId/role:', error);
       }
     };
-    loadTotemId();
+    loadTotemIdAndRole();
 
     // Se já recebeu o CLANN via params, usa diretamente
     if (clanFromParams) {

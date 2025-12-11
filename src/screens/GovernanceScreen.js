@@ -64,6 +64,7 @@ import {
   getClanMembers
 } from '../clans/CouncilManager';
 import { CLAN_ROLES } from '../config/ClanTypes';
+import { can, canManageRules, canApproveRules, canManageCouncil, canViewGovernance, canAccessAdminTools } from '../clans/permissions';
 
 export default function GovernanceScreen() {
   const route = useRoute();
@@ -90,6 +91,7 @@ export default function GovernanceScreen() {
   const [historyRuleId, setHistoryRuleId] = useState(null);
   const [ruleHistory, setRuleHistory] = useState([]);
   const [pendingApprovals, setPendingApprovals] = useState([]);
+  const [executedApprovals, setExecutedApprovals] = useState([]); // Sprint 8 - ETAPA 5
   const [loadingApprovals, setLoadingApprovals] = useState(false);
   const [council, setCouncil] = useState(null);
   const [clanMembers, setClanMembers] = useState([]);
@@ -157,7 +159,23 @@ export default function GovernanceScreen() {
     try {
       setLoadingApprovals(true);
       const approvals = await getPendingApprovals(clan.id);
-      setPendingApprovals(approvals);
+      
+      // Sprint 8 - ETAPA 5: Separar pendentes de executadas
+      // Pendentes: status = pending OU (status = approved E executed = 0/false/null)
+      // Executadas: executed = 1/true E executed_at não nulo
+      const pending = approvals.filter(a => {
+        const isPending = a.status === APPROVAL_STATUS.PENDING;
+        const isApprovedNotExecuted = a.status === APPROVAL_STATUS.APPROVED && 
+          (!a.executed || a.executed === 0 || a.executed === false);
+        return isPending || isApprovedNotExecuted;
+      });
+      
+      const executed = approvals.filter(a => {
+        return (a.executed === 1 || a.executed === true) && a.executed_at;
+      });
+      
+      setPendingApprovals(pending);
+      setExecutedApprovals(executed);
     } catch (error) {
       console.error('Erro ao carregar aprovações pendentes:', error);
     } finally {
@@ -490,8 +508,10 @@ export default function GovernanceScreen() {
     );
   };
 
-  const canManageRules = userRole === CLAN_ROLES.FOUNDER || userRole === CLAN_ROLES.ADMIN;
-  const canApproveRules = userRole === CLAN_ROLES.FOUNDER || userRole === CLAN_ROLES.ADMIN;
+  // Permissões usando sistema centralizado (Sprint 8 - ETAPA 2)
+  const canManageRulesPermission = canManageRules(userRole);
+  const canApproveRulesPermission = canApproveRules(userRole);
+  const canManageCouncilPermission = canManageCouncil(userRole);
 
   if (loading) {
     return (
@@ -580,7 +600,7 @@ export default function GovernanceScreen() {
         <View style={styles.block}>
           <View style={styles.blockHeader}>
             <Text style={styles.blockTitle}>📜 Regras do CLANN</Text>
-            {canManageRules && (
+            {canManageRulesPermission && (
               <View style={styles.headerActions}>
                 <TouchableOpacity
                   onPress={() => setShowTemplates(true)}
@@ -669,7 +689,7 @@ export default function GovernanceScreen() {
                       </TouchableOpacity>
                     </View>
                     <View style={styles.ruleActions}>
-                      {canManageRules && (
+                      {canManageRulesPermission && (
                         <>
                           <TouchableOpacity
                             onPress={() => {
@@ -696,7 +716,7 @@ export default function GovernanceScreen() {
                           </TouchableOpacity>
                         </>
                       )}
-                      {canApproveRules && needsApproval && (
+                      {canApproveRulesPermission && needsApproval && (
                         <TouchableOpacity
                           onPress={() => handleApproveRule(rule)}
                           style={[styles.ruleActionButton, styles.approveButton]}
@@ -716,7 +736,7 @@ export default function GovernanceScreen() {
         <View style={styles.block}>
           <View style={styles.blockHeader}>
             <Text style={styles.blockTitle}>👥 Conselho de Anciões</Text>
-            {canManageRules && council && (
+            {canManageCouncilPermission && council && (
               <View style={styles.headerActions}>
                 <TouchableOpacity
                   onPress={() => setShowSetApprovalsModal(true)}
@@ -756,7 +776,7 @@ export default function GovernanceScreen() {
                   council.elders.map((elderTotem, index) => {
                     const isFounder = elderTotem === council.founder_totem;
                     const isCurrentUser = elderTotem === currentTotemId;
-                    const canRemove = canManageRules && !isFounder && elderTotem !== currentTotemId;
+                    const canRemove = canManageCouncilPermission && !isFounder && elderTotem !== currentTotemId;
 
                     return (
                       <View key={index} style={styles.elderCard}>
@@ -820,8 +840,8 @@ export default function GovernanceScreen() {
                 const isRequester = approval.requested_by === currentTotemId;
                 const hasApproved = approval.approvals?.includes(currentTotemId);
                 const hasRejected = approval.rejections?.includes(currentTotemId);
-                const canApprove = canApproveRules && !hasApproved && !hasRejected && isPending;
-                const canReject = canApproveRules && !hasApproved && !hasRejected && isPending;
+                const canApprove = canApproveRulesPermission && !hasApproved && !hasRejected && isPending;
+                const canReject = canApproveRulesPermission && !hasApproved && !hasRejected && isPending;
 
                 return (
                   <View key={approval.id} style={styles.approvalCard}>
@@ -933,6 +953,24 @@ export default function GovernanceScreen() {
             </Text>
           </View>
         </View>
+
+        {/* BLOCO 5: Admin Tools (Sprint 8 - ETAPA 4) */}
+        {canAccessAdminTools(userRole) && (
+          <View style={styles.block}>
+            <View style={styles.blockHeader}>
+              <Text style={styles.blockTitle}>⚙️ Ferramentas Administrativas</Text>
+            </View>
+            <Text style={styles.blockDescription}>
+              Acesse ferramentas avançadas de administração: exportação, reset e verificação de integridade.
+            </Text>
+            <TouchableOpacity
+              style={styles.adminToolsButton}
+              onPress={() => navigation.navigate('AdminTools', { clanId: clan.id, clan })}
+            >
+              <Text style={styles.adminToolsButtonText}>Abrir Admin Tools</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
 
       {/* Modal: Adicionar Regra */}
@@ -1938,6 +1976,48 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 11,
     textAlign: 'center',
+  },
+  executedCard: {
+    opacity: 0.8,
+    borderColor: '#4CAF50',
+  },
+  approvalStatusDotExecuted: {
+    backgroundColor: '#4CAF50',
+  },
+  executedStatusText: {
+    color: '#4CAF50',
+  },
+  executedBadge: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  executedBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  blockDescription: {
+    color: '#aaa',
+    fontSize: 14,
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  adminToolsButton: {
+    backgroundColor: '#4a90e2',
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  adminToolsButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

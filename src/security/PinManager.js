@@ -32,8 +32,8 @@ const AES_KEY_KEY = 'aes_key';
 const PIN_ATTEMPTS_KEY = 'pin_attempts';
 const PIN_LOCKED_UNTIL_KEY = 'pin_locked_until';
 
-// Tempo de bloqueio após 5 tentativas (30 segundos)
-const LOCK_DURATION = 30 * 1000; // 30 segundos em milissegundos
+// Tempo de bloqueio após 5 tentativas (5 minutos) - Sprint 8 - ETAPA 3
+const LOCK_DURATION = 5 * 60 * 1000; // 5 minutos em milissegundos
 
 /**
  * Valida o formato do PIN (4-6 dígitos)
@@ -177,11 +177,12 @@ async function incrementPinAttempts() {
   attempts += 1;
 
   if (attempts >= 5) {
-    // Bloqueia por 30 segundos
+    // Bloqueia por 5 minutos - Sprint 8 - ETAPA 3
     const lockUntil = Date.now() + LOCK_DURATION;
     await SecureStore.setItemAsync(PIN_LOCKED_UNTIL_KEY, lockUntil.toString());
     await SecureStore.setItemAsync(PIN_ATTEMPTS_KEY, '0'); // Reseta contador
-    throw new Error('Muitas tentativas incorretas. PIN bloqueado por 30 segundos.');
+    const minutes = Math.ceil(LOCK_DURATION / (60 * 1000));
+    throw new Error(`Muitas tentativas incorretas. PIN bloqueado por ${minutes} minutos.`);
   } else {
     await SecureStore.setItemAsync(PIN_ATTEMPTS_KEY, attempts.toString());
   }
@@ -241,6 +242,64 @@ export async function getLockRemainingTime() {
     return remaining;
   } catch (error) {
     return 0;
+  }
+}
+
+/**
+ * Valida PIN para ações sensíveis (Sprint 8 - ETAPA 3)
+ * @param {string} pin - PIN a validar
+ * @returns {Promise<boolean>} True se PIN é válido
+ */
+export async function validatePinForSensitiveAction(pin) {
+  try {
+    // Verifica se PIN está configurado
+    const hasPinConfigured = await hasPin();
+    if (!hasPinConfigured) {
+      throw new Error('PIN não configurado. Configure um PIN primeiro.');
+    }
+    
+    // Verifica PIN
+    const isValid = await verifyPin(pin);
+    if (!isValid) {
+      throw new Error('PIN incorreto');
+    }
+    
+    return true;
+  } catch (error) {
+    if (error.message.includes('bloqueado') || error.message.includes('incorreto')) {
+      throw error;
+    }
+    throw new Error(`Erro ao validar PIN: ${error.message}`);
+  }
+}
+
+/**
+ * Verifica se PIN é necessário para uma ação
+ * @param {string} action - Tipo de ação (export, reset, admin, etc)
+ * @returns {Promise<boolean>} True se PIN é necessário
+ */
+export async function isPinRequiredForAction(action) {
+  try {
+    // Ações que sempre requerem PIN
+    const sensitiveActions = ['export', 'reset', 'admin', 'advanced_settings'];
+    
+    if (sensitiveActions.includes(action)) {
+      return true;
+    }
+    
+    // Verifica Device Trust Score
+    const { calculateTrustScore, shouldRequirePin, shouldBlockSensitiveActions } = await import('./DeviceTrust');
+    const trustScore = await calculateTrustScore();
+    
+    if (shouldBlockSensitiveActions(trustScore) || shouldRequirePin(trustScore)) {
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    console.error('Erro ao verificar se PIN é necessário:', error);
+    // Em caso de erro, exige PIN (mais seguro)
+    return true;
   }
 }
 
