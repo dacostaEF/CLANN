@@ -88,6 +88,13 @@ export default function ClanDetailScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Botão de retorno */}
+      <TouchableOpacity
+        style={styles.backButton}
+        onPress={() => navigation.goBack()}
+      >
+        <Text style={styles.backButtonText}>← Voltar</Text>
+      </TouchableOpacity>
 
       <Text style={styles.icon}>{clan.icon}</Text>
       <Text style={styles.name}>{clan.name}</Text>
@@ -138,6 +145,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#0a0a0a',
     padding: 20,
     alignItems: 'center'
+  },
+  backButton: {
+    alignSelf: 'flex-start',
+    padding: 8,
+    marginBottom: 10
+  },
+  backButtonText: {
+    color: '#4a90e2',
+    fontSize: 16,
+    fontWeight: '600'
   },
   loadingContainer: {
     flex: 1,

@@ -131,7 +131,7 @@ function AppNavigator() {
     <NavigationContainer>
       <StatusBar style="light" />
       <Stack.Navigator
-        initialRouteName="AuthCheck"
+        initialRouteName="Welcome"
         screenOptions={{
           headerShown: false,
           animation: 'fade',

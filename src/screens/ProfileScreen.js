@@ -212,6 +212,14 @@ export default function ProfileScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
+          {navigation.canGoBack() && (
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => navigation.goBack()}
+            >
+              <Ionicons name="arrow-back" size={24} color="#ffffff" />
+            </TouchableOpacity>
+          )}
           <Text style={styles.title}>Perfil do Totem</Text>
           <Text style={styles.subtitle}>
             Informações da sua identidade digital
@@ -493,6 +501,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 32,
     paddingTop: 8,
+    position: 'relative',
+  },
+  backButton: {
+    position: 'absolute',
+    left: 0,
+    top: 8,
+    padding: 4,
+    zIndex: 10,
   },
   title: {
     fontSize: 28,
