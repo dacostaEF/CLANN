@@ -32,10 +32,23 @@ const TOTEM_KEY = 'totem_data';
  */
 export async function saveTotemSecure(totemData) {
   try {
+    console.log("[SecureStore] Salvando Totem...");
     // Converte o objeto para JSON e salva de forma segura
     const jsonData = JSON.stringify(totemData);
     await SecureStore.setItemAsync(TOTEM_KEY, jsonData);
+    console.log("[SecureStore] Totem salvo com sucesso:", jsonData);
+
+    // PATCH: LIMPEZA AUTOMÁTICA DE PIN ANTIGO
+    await SecureStore.deleteItemAsync("pin_hash");
+    await SecureStore.deleteItemAsync("pin_salt");
+    await SecureStore.deleteItemAsync("pin_attempts");
+    await SecureStore.deleteItemAsync("self_destruct_attempts");
+
+    console.log("[SecureStore] PIN antigo removido após criar um novo Totem.");
+
+    return true;
   } catch (error) {
+    console.error("[SecureStore] Erro ao salvar Totem:", error);
     throw new Error(`Erro ao salvar Totem: ${error.message}`);
   }
 }
@@ -46,7 +59,9 @@ export async function saveTotemSecure(totemData) {
  */
 export async function loadTotemSecure() {
   try {
+    console.log("[SecureStore] Lendo chave:", TOTEM_KEY);
     const jsonData = await SecureStore.getItemAsync(TOTEM_KEY);
+    console.log("[SecureStore] Valor encontrado:", jsonData);
     if (!jsonData) {
       return null;
     }

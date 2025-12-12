@@ -49,6 +49,9 @@ export default function MessageBubble({
     return injectWatermark(message, currentTotemId);
   }, [message, currentTotemId, deleted]);
 
+  // Normaliza watermarkedMessage para garantir que seja sempre string (proteção contra text node warning)
+  const safeMessage = typeof watermarkedMessage === 'string' ? watermarkedMessage : '';
+
   return (
     <View style={[
       styles.container,
@@ -74,7 +77,7 @@ export default function MessageBubble({
           isSent ? styles.messageTextSent : styles.messageTextReceived,
           deleted && styles.deletedText
         ]}>
-          {watermarkedMessage}
+          {safeMessage}
         </Text>
 
         {/* Timestamp e indicadores */}

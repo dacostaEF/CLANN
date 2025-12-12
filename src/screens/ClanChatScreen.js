@@ -449,11 +449,16 @@ export default function ClanChatScreen() {
       const prevItem = groupedMessages[index + 1];
       const showAuthor = shouldShowAuthor(item, prevItem);
 
+      // Normalizar authorName para evitar problemas com null/undefined
+      const authorName = !isMyMessage && item.authorTotem
+        ? `Totem ${item.authorTotem.slice(0, 8)}...`
+        : null;
+
       return (
         <MessageBubble
           message={item.message}
           isSent={isMyMessage}
-          authorName={!isMyMessage ? `Totem ${item.authorTotem.slice(0, 8)}...` : null}
+          authorName={authorName}
           timestamp={item.timestamp}
           showAuthor={showAuthor && !isMyMessage}
           showAvatar={false}
@@ -468,8 +473,6 @@ export default function ClanChatScreen() {
           edited={item.edited || false}
           deleted={item.deleted || false}
           editedAt={item.editedAt || null}
-          deliveredTo={item.deliveredTo || []}
-          readBy={item.readBy || []}
         />
       );
     }

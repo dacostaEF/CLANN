@@ -82,8 +82,8 @@ export default function EnterPinScreen({ navigation, onSuccess }) {
       setPin(newPin);
       setError(false);
       
-      // Se PIN completo, verifica automaticamente
-      if (newPin.length >= 4) {
+      // Se PIN completo (6 dígitos), verifica automaticamente
+      if (newPin.length === 6) {
         handleVerify(newPin);
       }
     }

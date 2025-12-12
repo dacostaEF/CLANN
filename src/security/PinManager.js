@@ -11,14 +11,21 @@ import { randomBytes } from '../utils/randomBytes';
 // Polyfill para web usando localStorage
 let SecureStore;
 if (Platform.OS === 'web') {
+  console.log("[PinManager] ✅ Usando polyfill Web para SecureStore");
   SecureStore = {
     async setItemAsync(key, value) {
+      console.log("[SecureStore WEB] Gravando:", key, value?.substring(0, 20) + "...");
       localStorage.setItem(key, value);
+      const test = localStorage.getItem(key);
+      console.log("[SecureStore WEB] ✅ Confirmado salvo:", test ? "SIM" : "NÃO");
     },
     async getItemAsync(key) {
-      return localStorage.getItem(key);
+      const val = localStorage.getItem(key);
+      console.log("[SecureStore WEB] Lendo:", key, val?.substring?.(0, 20) + "...");
+      return val;
     },
     async deleteItemAsync(key) {
+      console.log("[SecureStore WEB] Apagando:", key);
       localStorage.removeItem(key);
     },
   };
@@ -63,7 +70,8 @@ async function hashPin(pin, salt) {
     hash = sha256(hash);
   }
   
-  return Buffer.from(hash).toString('hex');
+  // Garante que o hash sempre retorne em minúsculas
+  return Buffer.from(hash).toString('hex').toLowerCase();
 }
 
 /**
@@ -101,7 +109,7 @@ export async function createPin(pin) {
 
   // Gera salt aleatório
   const salt = randomBytes(16);
-  const saltHex = Buffer.from(salt).toString('hex');
+  const saltHex = Buffer.from(salt).toString('hex').toLowerCase();
 
   // Gera hash do PIN
   const pinHash = await hashPin(pin, salt);
@@ -111,13 +119,35 @@ export async function createPin(pin) {
   const aesKeyHex = Buffer.from(aesKey).toString('hex');
 
   // Salva tudo no SecureStore
-  await SecureStore.setItemAsync(PIN_KEY, pinHash);
-  await SecureStore.setItemAsync(PIN_SALT_KEY, saltHex);
-  await SecureStore.setItemAsync(AES_KEY_KEY, aesKeyHex);
+  try {
+    // Salva PIN
+    await SecureStore.setItemAsync(PIN_KEY, pinHash);
+    console.log("[PinManager] PIN salvo:", PIN_KEY, pinHash);
 
-  // Reseta tentativas
-  await SecureStore.deleteItemAsync(PIN_ATTEMPTS_KEY);
-  await SecureStore.deleteItemAsync(PIN_LOCKED_UNTIL_KEY);
+    // Salva SALT
+    await SecureStore.setItemAsync(PIN_SALT_KEY, saltHex);
+    console.log("[PinManager] SALT salvo:", PIN_SALT_KEY, saltHex);
+
+    // Salva AES KEY
+    await SecureStore.setItemAsync(AES_KEY_KEY, aesKeyHex);
+    console.log("[PinManager] AES KEY salva:", AES_KEY_KEY, aesKeyHex);
+
+    // Testes de leitura imediata
+    const testPin = await SecureStore.getItemAsync(PIN_KEY);
+    const testSalt = await SecureStore.getItemAsync(PIN_SALT_KEY);
+
+    console.log("[PinManager] ✅ Teste leitura PIN:", testPin ? "OK" : "FALHOU");
+    console.log("[PinManager] ✅ Teste leitura SALT:", testSalt ? "OK" : "FALHOU");
+
+    // Reset tentativas de erro
+    await SecureStore.deleteItemAsync(PIN_ATTEMPTS_KEY);
+    await SecureStore.deleteItemAsync(PIN_LOCKED_UNTIL_KEY);
+    console.log("[PinManager] Tentativas resetadas.");
+
+  } catch (err) {
+    console.error("[PinManager] ❌ ERRO AO SALVAR PIN:", err);
+    throw new Error(`Falha ao salvar PIN: ${err.message}`);
+  }
 }
 
 /**
@@ -127,6 +157,12 @@ export async function createPin(pin) {
  */
 export async function verifyPin(pin) {
   try {
+    // Valida formato do PIN antes de processar
+    if (!validatePinFormat(pin)) {
+      console.log("[PIN VERIFY] ❌ Formato de PIN inválido");
+      return false;
+    }
+
     // Verifica se está bloqueado
     const lockedUntil = await SecureStore.getItemAsync(PIN_LOCKED_UNTIL_KEY);
     if (lockedUntil) {
@@ -137,6 +173,7 @@ export async function verifyPin(pin) {
       }
       // Desbloqueia se o tempo passou
       await SecureStore.deleteItemAsync(PIN_LOCKED_UNTIL_KEY);
+      console.log("[PIN VERIFY] ✅ Bloqueio expirado, desbloqueado automaticamente");
     }
 
     // Carrega hash e salt
@@ -144,18 +181,50 @@ export async function verifyPin(pin) {
     const saltHex = await SecureStore.getItemAsync(PIN_SALT_KEY);
 
     if (!storedHash || !saltHex) {
+      console.log("[PIN VERIFY] ❌ PIN ou SALT não encontrado no storage");
+      console.log("[PIN VERIFY] storedHash existe:", !!storedHash);
+      console.log("[PIN VERIFY] saltHex existe:", !!saltHex);
       return false;
     }
 
-    const salt = Buffer.from(saltHex, 'hex');
-    const computedHash = await hashPin(pin, salt);
+    // Limpa e normaliza saltHex
+    const cleanSaltHex = saltHex.trim().toLowerCase();
+    console.log("[PIN VERIFY] Salt lido (original):", saltHex);
+    console.log("[PIN VERIFY] Salt lido (limpo):", cleanSaltHex);
 
-    if (computedHash === storedHash) {
+    // Converte salt para Buffer
+    const salt = Buffer.from(cleanSaltHex, 'hex');
+    
+    // Valida tamanho do salt (deve ser 16 bytes = 32 caracteres hex)
+    if (salt.length !== 16) {
+      console.log("[PIN VERIFY] ❌ Salt inválido (tamanho incorreto):", salt.length, "esperado: 16");
+      return false;
+    }
+
+    // Calcula hash do PIN
+    const computedHash = await hashPin(pin, salt);
+    
+    // Normaliza ambos os hashes para comparação
+    const normalizedStored = storedHash.trim().toLowerCase();
+    const normalizedComputed = computedHash.trim().toLowerCase();
+
+    // Logs detalhados para diagnóstico
+    console.log("[PIN VERIFY] Hash salvo (original):", storedHash);
+    console.log("[PIN VERIFY] Hash salvo (normalizado):", normalizedStored);
+    console.log("[PIN VERIFY] Hash calculado (original):", computedHash);
+    console.log("[PIN VERIFY] Hash calculado (normalizado):", normalizedComputed);
+    console.log("[PIN VERIFY] Igualdade (comparação direta):", storedHash === computedHash);
+    console.log("[PIN VERIFY] Igualdade (normalizado):", normalizedStored === normalizedComputed);
+
+    if (normalizedStored === normalizedComputed) {
       // PIN correto - reseta tentativas
+      console.log("[PIN VERIFY] ✅ PIN correto!");
       await SecureStore.deleteItemAsync(PIN_ATTEMPTS_KEY);
+      await SecureStore.deleteItemAsync(PIN_LOCKED_UNTIL_KEY);
       return true;
     } else {
       // PIN incorreto - incrementa tentativas
+      console.log("[PIN VERIFY] ❌ PIN incorreto - hashes não coincidem");
       await incrementPinAttempts();
       return false;
     }
@@ -163,6 +232,7 @@ export async function verifyPin(pin) {
     if (error.message.includes('bloqueado')) {
       throw error;
     }
+    console.error("[PIN VERIFY] ❌ Erro ao verificar PIN:", error);
     return false;
   }
 }

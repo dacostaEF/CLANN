@@ -130,9 +130,12 @@ export default function TotemGenerationScreen({ navigation }) {
         console.log('Gerando Totem...');
         const newTotem = generateTotem();
         console.log('Totem gerado:', newTotem);
+        console.log('TOTEM GERADO >>>', JSON.stringify(newTotem, null, 2));
+        console.log('Propriedades do Totem:', Object.keys(newTotem));
         
         // Salva o Totem de forma segura
         console.log('Salvando Totem...');
+        console.log('TOTEM ANTES DE SALVAR >>>', JSON.stringify(newTotem, null, 2));
         await saveTotemSecure(newTotem);
         console.log('Totem salvo com sucesso');
         

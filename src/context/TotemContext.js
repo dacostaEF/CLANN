@@ -49,7 +49,15 @@ export function TotemProvider({ children }) {
 
   // Carrega Totem ao montar o provider
   useEffect(() => {
-    loadTotem();
+    console.log("[TotemContext] Iniciando carregamento do Totem...");
+    
+    loadTotem().then((loadedTotem) => {
+      console.log("[TotemContext] Totem carregado do storage:", loadedTotem);
+      
+      if (!loadedTotem) {
+        console.warn("[TotemContext] Nenhum Totem encontrado — fluxo seguirá para onboarding.");
+      }
+    });
   }, []);
 
   const value = {

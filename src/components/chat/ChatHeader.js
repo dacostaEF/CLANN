@@ -81,7 +81,7 @@ export default function ChatHeader({ clan, onBack, memberCount = 0 }) {
                 {clan?.name || 'CLANN'}
               </Text>
               <Text style={styles.subtitle} numberOfLines={1}>
-                {memberCount} {memberCount === 1 ? 'membro' : 'membros'} • Modo Seguro: ON
+                {memberCount || 0} {memberCount === 1 ? 'membro' : 'membros'} • Modo Seguro: ON
               </Text>
             </View>
           </View>
