@@ -50,6 +50,7 @@ import TotemBackupScreen from './src/screens/totem/TotemBackupScreen';
 import TotemExportScreen from './src/screens/totem/TotemExportScreen';
 import TotemSecretPhraseScreen from './src/screens/totem/TotemSecretPhraseScreen';
 import LinkedDevicesScreen from './src/screens/totem/LinkedDevicesScreen';
+import TotemAboutScreen from './src/screens/totem/TotemAboutScreen';
 
 // Banco SQLite
 import ClanStorage from './src/clans/ClanStorage';
@@ -182,6 +183,7 @@ function AppNavigator() {
         <Stack.Screen name="TotemExport" component={TotemExportScreen} />
         <Stack.Screen name="TotemSecretPhrase" component={TotemSecretPhraseScreen} />
         <Stack.Screen name="LinkedDevices" component={LinkedDevicesScreen} />
+        <Stack.Screen name="TotemAbout" component={TotemAboutScreen} />
 
       </Stack.Navigator>
     </NavigationContainer>

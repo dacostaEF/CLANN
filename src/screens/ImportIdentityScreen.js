@@ -17,13 +17,20 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { importTotemFromPicker } from '../backup/ImportTotem';
+import { importTotemFromPicker, importTotemFromQR } from '../backup/ImportTotem';
 import { hasTotemSecure } from '../storage/secureStore';
+import { useTotem } from '../context/TotemContext';
+import QRScannerModal from '../components/QRScannerModal';
 
 export default function ImportIdentityScreen({ navigation }) {
+  const { setTotem } = useTotem();
   const [loading, setLoading] = useState(false);
   const [pin, setPin] = useState('');
   const [showPinInput, setShowPinInput] = useState(false);
+  const [showQRScanner, setShowQRScanner] = useState(false);
+  const [importMode, setImportMode] = useState(null); // 'file' ou 'qr'
+  const [qrChunks, setQrChunks] = useState([]);
+  const [qrChecksum, setQrChecksum] = useState(null);
 
   const handleImport = async () => {
     if (!pin || pin.length < 4) {
@@ -64,7 +71,26 @@ export default function ImportIdentityScreen({ navigation }) {
 
   const performImport = async () => {
     try {
-      const totem = await importTotemFromPicker(pin);
+      let totem;
+      
+      if (importMode === 'qr') {
+        // Importar via QR Code
+        const qrData = qrChunks.length > 0 
+          ? { type: 'multi', chunks: qrChunks, checksum: qrChecksum }
+          : qrChunks[0] || null;
+        
+        if (!qrData) {
+          throw new Error('Nenhum QR Code escaneado');
+        }
+        
+        totem = await importTotemFromQR(qrData, pin);
+      } else {
+        // Importar via arquivo
+        totem = await importTotemFromPicker(pin);
+      }
+      
+      // Atualizar TotemContext
+      setTotem(totem);
       
       Alert.alert(
         'Sucesso',
@@ -73,10 +99,8 @@ export default function ImportIdentityScreen({ navigation }) {
           {
             text: 'OK',
             onPress: () => {
-              navigation.reset({
-                index: 0,
-                routes: [{ name: 'Home' }],
-              });
+              // Navegar para CreatePin conforme Dose 3
+              navigation.replace('CreatePin');
             },
           },
         ]
@@ -87,11 +111,58 @@ export default function ImportIdentityScreen({ navigation }) {
       setLoading(false);
       setPin('');
       setShowPinInput(false);
+      setImportMode(null);
+      setQrChunks([]);
+      setQrChecksum(null);
     }
   };
 
   const handleSelectFile = () => {
+    setImportMode('file');
     setShowPinInput(true);
+  };
+
+  const handleScanQR = () => {
+    setImportMode('qr');
+    setShowQRScanner(true);
+  };
+
+  const handleQRScanned = (data) => {
+    try {
+      const parsed = JSON.parse(data);
+      
+      if (parsed.type === 'multi' && parsed.chunks) {
+        // QR Code múltiplo
+        const existingChunk = qrChunks.find(c => c.index === parsed.chunks[0].index);
+        if (!existingChunk) {
+          setQrChunks([...qrChunks, ...parsed.chunks]);
+          setQrChecksum(parsed.checksum);
+          
+          if (parsed.chunks.length === parsed.chunks[0].total) {
+            // Todos os chunks foram escaneados
+            setShowQRScanner(false);
+            setShowPinInput(true);
+            Alert.alert('Sucesso', 'Todos os QR Codes foram escaneados. Digite o PIN.');
+          } else {
+            Alert.alert('QR Code escaneado', `Escaneado ${qrChunks.length + parsed.chunks.length} de ${parsed.chunks[0].total}. Continue escaneando.`);
+          }
+        } else {
+          Alert.alert('QR Code já escaneado', 'Este QR Code já foi escaneado.');
+        }
+      } else {
+        // QR Code único
+        setQrChunks([parsed]);
+        setShowQRScanner(false);
+        setShowPinInput(true);
+        Alert.alert('QR Code escaneado', 'Digite o PIN para descriptografar.');
+      }
+    } catch (error) {
+      // Se não for JSON, assume que é o encrypted data direto
+      setQrChunks([{ data, index: 0, total: 1 }]);
+      setShowQRScanner(false);
+      setShowPinInput(true);
+      Alert.alert('QR Code escaneado', 'Digite o PIN para descriptografar.');
+    }
   };
 
   return (
@@ -115,7 +186,7 @@ export default function ImportIdentityScreen({ navigation }) {
                 <View style={styles.infoBox}>
                   <Ionicons name="information-circle-outline" size={24} color="#4a90e2" />
                   <Text style={styles.infoText}>
-                    Selecione o arquivo de backup (.cln) e digite o PIN usado para criptografá-lo.
+                    Escolha como deseja importar seu Totem: via arquivo ou QR Code.
                   </Text>
                 </View>
 
@@ -125,7 +196,16 @@ export default function ImportIdentityScreen({ navigation }) {
                   disabled={loading}
                 >
                   <Ionicons name="folder-open-outline" size={32} color="#ffffff" />
-                  <Text style={styles.importButtonText}>Selecionar Arquivo</Text>
+                  <Text style={styles.importButtonText}>Importar de Arquivo</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.importButton, styles.importButtonQR, loading && styles.importButtonDisabled]}
+                  onPress={handleScanQR}
+                  disabled={loading}
+                >
+                  <Ionicons name="qr-code-outline" size={32} color="#ffffff" />
+                  <Text style={styles.importButtonText}>Escanear QR Code</Text>
                 </TouchableOpacity>
               </>
             ) : (
@@ -180,6 +260,18 @@ export default function ImportIdentityScreen({ navigation }) {
           </View>
         </ScrollView>
       </LinearGradient>
+
+      {/* QR Scanner Modal */}
+      <QRScannerModal
+        visible={showQRScanner}
+        onClose={() => {
+          setShowQRScanner(false);
+          if (qrChunks.length === 0) {
+            setImportMode(null);
+          }
+        }}
+        onScanned={handleQRScanned}
+      />
     </SafeAreaView>
   );
 }
@@ -238,9 +330,14 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 24,
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 16,
     flexDirection: 'row',
     justifyContent: 'center',
+  },
+  importButtonQR: {
+    backgroundColor: '#2a2a3e',
+    borderWidth: 1,
+    borderColor: '#4a90e2',
   },
   importButtonDisabled: {
     opacity: 0.5,

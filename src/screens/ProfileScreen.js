@@ -18,13 +18,14 @@ import * as Clipboard from 'expo-clipboard';
 import { useNavigation } from '@react-navigation/native';
 import { useTotem } from '../context/TotemContext';
 import { getTotemStats } from '../crypto/totemStorage';
-import { loadTotemSecure } from '../storage/secureStore';
+import { loadTotemSecure, saveTotemSecure } from '../storage/secureStore';
 import SecretPhraseModal from '../components/totem/SecretPhraseModal';
 
 export default function ProfileScreen() {
   const navigation = useNavigation();
-  const { totem, loading } = useTotem();
+  const { totem, loading, setTotem } = useTotem();
   const [customName, setCustomName] = useState('');
+  const [savingName, setSavingName] = useState(false);
   const [stats, setStats] = useState({
     createdAt: null,
     clannsCreated: 0,
@@ -82,8 +83,54 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleSaveName = () => {
-    Alert.alert('Renomear Totem', 'Funcionalidade em desenvolvimento');
+  const handleSaveName = async () => {
+    // Validar nome
+    const trimmedName = customName.trim();
+    if (!trimmedName || trimmedName.length === 0) {
+      Alert.alert('Erro', 'Nome não pode estar vazio');
+      return;
+    }
+    if (trimmedName.length > 50) {
+      Alert.alert('Erro', 'Nome muito longo (máximo 50 caracteres)');
+      return;
+    }
+
+    setSavingName(true);
+    try {
+      // Carregar Totem atual
+      const currentTotem = await loadTotemSecure();
+      if (!currentTotem) {
+        Alert.alert('Erro', 'Totem não encontrado');
+        return;
+      }
+
+      // Garantir que totemId não seja alterado
+      if (!currentTotem.totemId) {
+        Alert.alert('Erro', 'Totem inválido - totemId ausente');
+        return;
+      }
+
+      // Atualizar apenas symbolicName
+      const updatedTotem = {
+        ...currentTotem,
+        symbolicName: trimmedName,
+      };
+
+      // Salvar Totem atualizado
+      await saveTotemSecure(updatedTotem);
+
+      // Atualizar TotemContext
+      setTotem(updatedTotem);
+
+      // Limpar campo e dar feedback
+      setCustomName('');
+      Alert.alert('Sucesso', 'Nome do Totem atualizado com sucesso');
+    } catch (error) {
+      console.error('Erro ao renomear Totem:', error);
+      Alert.alert('Erro', `Não foi possível atualizar o nome: ${error.message}`);
+    } finally {
+      setSavingName(false);
+    }
   };
 
   const handleViewDevices = () => {
@@ -92,6 +139,10 @@ export default function ProfileScreen() {
 
   const handleViewStats = () => {
     navigation.navigate('TotemStats');
+  };
+
+  const handleAboutTotem = () => {
+    navigation.navigate('TotemAbout');
   };
 
   // Carregar estatísticas do Totem
@@ -280,11 +331,18 @@ export default function ProfileScreen() {
               maxLength={50}
             />
             <AnimatedPressable
-              style={styles.saveButton}
+              style={[styles.saveButton, savingName && styles.saveButtonDisabled]}
               onPress={handleSaveName}
+              disabled={savingName}
             >
-              <Ionicons name="checkmark-circle-outline" size={20} color="#ffffff" />
-              <Text style={styles.saveButtonText}>Salvar Nome</Text>
+              {savingName ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle-outline" size={20} color="#ffffff" />
+                  <Text style={styles.saveButtonText}>Salvar Nome</Text>
+                </>
+              )}
             </AnimatedPressable>
           </View>
         </View>
@@ -431,6 +489,28 @@ export default function ProfileScreen() {
               <View style={styles.actionButtonContent}>
                 <Text style={styles.actionButtonText}>Mostrar Frase Secreta</Text>
                 <Text style={styles.actionButtonSubtext}>12 palavras de recuperação</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#666" />
+            </AnimatedPressable>
+          </View>
+        </View>
+
+        {/* SEÇÃO 8: Sobre seu Totem */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="information-circle-outline" size={20} color="#4a90e2" />
+            <Text style={styles.sectionTitle}>Informações</Text>
+          </View>
+          
+          <View style={styles.card}>
+            <AnimatedPressable
+              style={styles.actionButton}
+              onPress={handleAboutTotem}
+            >
+              <Ionicons name="book-outline" size={24} color="#4a90e2" />
+              <View style={styles.actionButtonContent}>
+                <Text style={styles.actionButtonText}>Sobre seu Totem</Text>
+                <Text style={styles.actionButtonSubtext}>Entenda o que é soberania digital</Text>
               </View>
               <Ionicons name="chevron-forward" size={20} color="#666" />
             </AnimatedPressable>
@@ -618,6 +698,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  saveButtonDisabled: {
+    opacity: 0.5,
   },
   saveButtonText: {
     color: '#ffffff',

@@ -9,6 +9,7 @@ import { validateTotem, restoreTotem } from '../crypto/totem';
 import { sha256 } from '@noble/hashes/sha256';
 import * as FileSystem from 'expo-file-system';
 import * as DocumentPicker from 'expo-document-picker';
+import { reconstructFromChunks } from './QRBackup';
 
 /**
  * Descriptografa dados usando AES-256
@@ -145,5 +146,91 @@ export async function importTotemFromPicker(pin) {
   }
 
   return await importTotem(fileUri, pin);
+}
+
+/**
+ * Importa Totem a partir de QR Code escaneado
+ * @param {string} qrData - Dados do QR Code (pode ser string ou objeto com chunks)
+ * @param {string} pin - PIN para descriptografar
+ * @returns {Promise<Object>} Totem restaurado
+ */
+export async function importTotemFromQR(qrData, pin) {
+  try {
+    // Verifica PIN
+    const pinValid = await verifyPin(pin);
+    if (!pinValid) {
+      throw new Error('PIN incorreto');
+    }
+
+    // Obtém chave AES
+    const aesKeyHex = await getAESKey();
+    if (!aesKeyHex) {
+      throw new Error('Chave AES não encontrada');
+    }
+
+    const aesKey = Buffer.from(aesKeyHex, 'hex');
+
+    // Parse do QR Data
+    let backupData;
+    try {
+      backupData = typeof qrData === 'string' ? JSON.parse(qrData) : qrData;
+    } catch {
+      // Se não for JSON, assume que é o encrypted data direto
+      backupData = { encrypted: qrData, checksum: null };
+    }
+
+    // Se for QR Code múltiplo, precisa reconstruir
+    let encrypted;
+    let checksum;
+    
+    if (backupData.type === 'multi' && backupData.chunks) {
+      // QR Code múltiplo - precisa de todos os chunks
+      encrypted = await reconstructFromChunks(backupData.chunks, backupData.checksum);
+      checksum = backupData.checksum;
+    } else if (backupData.encrypted) {
+      // QR Code único
+      encrypted = backupData.encrypted;
+      checksum = backupData.checksum;
+    } else {
+      // Formato antigo - assume que qrData é o encrypted direto
+      encrypted = typeof qrData === 'string' ? qrData : JSON.stringify(qrData);
+      checksum = null;
+    }
+
+    // Valida checksum se disponível
+    if (checksum && !validateChecksum(encrypted, checksum)) {
+      throw new Error('QR Code corrompido - checksum inválido');
+    }
+
+    // Descriptografa
+    const decryptedJson = decryptAES(encrypted, aesKey);
+    const exportData = JSON.parse(decryptedJson);
+
+    // Valida estrutura do Totem
+    if (!exportData.totem || !exportData.totem.privateKey || !exportData.totem.publicKey) {
+      throw new Error('Dados do Totem inválidos');
+    }
+
+    // Valida integridade criptográfica do Totem
+    if (!validateTotem(exportData.totem)) {
+      throw new Error('Totem inválido - integridade comprometida');
+    }
+
+    // Restaura Totem usando a frase de recuperação (validação adicional)
+    const restoredTotem = restoreTotem(exportData.totem.recoveryPhrase);
+
+    // Compara com Totem importado
+    if (restoredTotem.privateKey !== exportData.totem.privateKey ||
+        restoredTotem.publicKey !== exportData.totem.publicKey) {
+      throw new Error('Totem não corresponde à frase de recuperação');
+    }
+
+    // Salva Totem
+    await saveTotemSecure(exportData.totem);
+
+    return exportData.totem;
+  } catch (error) {
+    throw new Error(`Erro ao importar Totem do QR Code: ${error.message}`);
+  }
 }
 
