@@ -58,7 +58,12 @@ export async function loadTotem() {
 
 /**
  * Retorna o ID do Totem atual
- * @returns {string|null}
+ * 
+ * @deprecated — usar TotemContext quando possível
+ * Esta função será removida em versão futura.
+ * Prefira usar: const { totem } = useTotem(); const totemId = totem?.totemId;
+ * 
+ * @returns {Promise<string|null>} ID do Totem ou null se não existir
  */
 export async function getCurrentTotemId() {
   const stored = await loadTotemSecure();

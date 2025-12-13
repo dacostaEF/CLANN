@@ -206,6 +206,10 @@ export default function TotemGenerationScreen({ navigation }) {
           {!loading && totemData && (
             <View style={styles.card}>
               <Text style={styles.cardName}>{totemData.symbolicName}</Text>
+              <Text style={styles.cardDescription}>
+                Este é o seu identificador seguro no CLANN.{'\n'}
+                Você pode renomeá-lo depois.
+              </Text>
 
               <View style={styles.row}>
                 <Text style={styles.label}>ID:</Text>
@@ -235,9 +239,15 @@ export default function TotemGenerationScreen({ navigation }) {
 
           {/* Botão de continuar (apenas quando não está carregando) */}
           {!loading && totemData && (
-            <TouchableOpacity style={styles.button} onPress={handleContinue} activeOpacity={0.8}>
-              <Text style={styles.buttonText}>Ver frase de recuperação</Text>
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity style={styles.button} onPress={handleContinue} activeOpacity={0.8}>
+                <Text style={styles.buttonText}>Ver frase de recuperação</Text>
+              </TouchableOpacity>
+              <Text style={styles.recoveryWarning}>
+                Guarde sua frase de recuperação.{'\n'}
+                Sem ela, sua identidade não pode ser restaurada.
+              </Text>
+            </>
           )}
         </View>
       </SafeAreaView>
@@ -316,8 +326,15 @@ const styles = StyleSheet.create({
     color: '#4a90e2',
     fontSize: 20,
     fontWeight: '700',
-    marginBottom: 18,
+    marginBottom: 12,
     textAlign: 'center',
+  },
+  cardDescription: {
+    color: '#aaaaaa',
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 18,
   },
   row: {
     flexDirection: 'row',
@@ -367,5 +384,13 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '700',
     fontSize: 16,
+  },
+  recoveryWarning: {
+    color: '#aaaaaa',
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginTop: 20,
+    paddingHorizontal: 20,
   },
 });

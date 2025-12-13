@@ -5,16 +5,19 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator
+  ActivityIndicator,
+  Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { loadTotemSecure } from '../../storage/secureStore';
+import { loadTotemSecure, deleteTotemSecure } from '../../storage/secureStore';
 import { validateTotem } from '../../crypto/totem';
+import { useTotem } from '../../context/TotemContext';
 
 export default function TotemAuditScreen() {
   const navigation = useNavigation();
+  const { clearTotem } = useTotem();
   const [loading, setLoading] = useState(true);
   const [checks, setChecks] = useState({
     totemExists: false,
@@ -77,6 +80,69 @@ export default function TotemAuditScreen() {
   };
 
   const allChecksPassed = Object.values(checks).every(check => check === true);
+
+  // DOSE 4.5 - Resetar Identidade com confirmação explícita
+  const handleResetIdentity = () => {
+    Alert.alert(
+      'Resetar Identidade',
+      'Esta ação irá apagar completamente seu Totem e todos os dados associados. Esta ação NÃO pode ser desfeita.\n\nVocê precisará criar um novo Totem ou importar um backup.\n\nDeseja continuar?',
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel',
+        },
+        {
+          text: 'Resetar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Confirmar novamente
+              Alert.alert(
+                'Confirmação Final',
+                'Esta é sua última chance. Após confirmar, seu Totem será apagado permanentemente.',
+                [
+                  {
+                    text: 'Cancelar',
+                    style: 'cancel',
+                  },
+                  {
+                    text: 'Confirmar Reset',
+                    style: 'destructive',
+                    onPress: async () => {
+                      try {
+                        await deleteTotemSecure();
+                        clearTotem();
+                        Alert.alert(
+                          'Identidade Resetada',
+                          'Seu Totem foi apagado. Você será redirecionado para criar um novo Totem.',
+                          [
+                            {
+                              text: 'OK',
+                              onPress: () => {
+                                navigation.reset({
+                                  index: 0,
+                                  routes: [{ name: 'Welcome' }],
+                                });
+                              },
+                            },
+                          ]
+                        );
+                      } catch (error) {
+                        console.error('Erro ao resetar identidade:', error);
+                        Alert.alert('Erro', 'Não foi possível resetar a identidade.');
+                      }
+                    },
+                  },
+                ]
+              );
+            } catch (error) {
+              console.error('Erro ao resetar identidade:', error);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -141,6 +207,31 @@ export default function TotemAuditScreen() {
                 <Ionicons name="refresh-outline" size={20} color="#4a90e2" />
                 <Text style={styles.refreshButtonText}>Verificar Novamente</Text>
               </TouchableOpacity>
+
+              {/* DOSE 4.5 - Opções de recuperação (apenas se houver problemas) */}
+              {!allChecksPassed && (
+                <View style={styles.recoveryContainer}>
+                  <Text style={styles.recoveryTitle}>Opções de Recuperação</Text>
+                  
+                  <TouchableOpacity
+                    style={styles.recoveryButton}
+                    onPress={() => navigation.navigate('ImportIdentity')}
+                  >
+                    <Ionicons name="cloud-upload-outline" size={24} color="#4a90e2" />
+                    <Text style={styles.recoveryButtonText}>Importar Totem</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.recoveryButton, styles.recoveryButtonDanger]}
+                    onPress={handleResetIdentity}
+                  >
+                    <Ionicons name="trash-outline" size={24} color="#f87171" />
+                    <Text style={[styles.recoveryButtonText, styles.recoveryButtonTextDanger]}>
+                      Resetar Identidade
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </>
           )}
         </View>
@@ -281,6 +372,44 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#4a90e2',
+  },
+  recoveryContainer: {
+    width: '100%',
+    marginTop: 32,
+    paddingTop: 24,
+    borderTopWidth: 1,
+    borderTopColor: '#2a2a2a',
+  },
+  recoveryTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#ffffff',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  recoveryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1a1a2e',
+    borderWidth: 1,
+    borderColor: '#4a90e2',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    gap: 12,
+  },
+  recoveryButtonDanger: {
+    borderColor: '#f87171',
+    backgroundColor: '#1a0a0a',
+  },
+  recoveryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#4a90e2',
+  },
+  recoveryButtonTextDanger: {
+    color: '#f87171',
   },
 });
 
