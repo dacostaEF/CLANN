@@ -17,8 +17,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { createPin } from '../security/PinManager';
 import { isBiometryAvailable } from '../security/BiometryManager';
+import { useTotem } from '../context/TotemContext';
 
 export default function CreatePinScreen({ navigation }) {
+  const { loadTotem } = useTotem();
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [isConfirming, setIsConfirming] = useState(false);
@@ -71,6 +73,9 @@ export default function CreatePinScreen({ navigation }) {
     setLoading(true);
     try {
       await createPin(finalPin);
+      
+      // Atualizar TotemContext para recalcular o estado (NEEDS_PIN → READY)
+      await loadTotem();
       
       if (showBiometryOption) {
         // Pergunta se deseja ativar biometria

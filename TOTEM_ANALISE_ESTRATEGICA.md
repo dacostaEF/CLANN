@@ -499,3 +499,5 @@
 **Com essas implementações, o Totem será um diferencial competitivo único do CLANN.** 🚀
 
 
+
+

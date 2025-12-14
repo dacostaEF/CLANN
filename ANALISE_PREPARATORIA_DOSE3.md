@@ -230,3 +230,5 @@ PIN correto → Home → ClanListScreen
 **Aguardando:** Conteúdo da Dose 3 para análise detalhada
 
 
+
+
