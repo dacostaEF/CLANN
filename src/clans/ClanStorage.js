@@ -1067,6 +1067,197 @@ class ClanStorage {
   }
 
   // ---------------------------------------------------------
+  // DOSE 2: Métodos para entrada via clannId (Gateway)
+  // ---------------------------------------------------------
+
+  /**
+   * Busca todos os CLANNs (para verificar se já existe um com clannId externo)
+   * @returns {Promise<Array>} Lista de todos os CLANNs
+   */
+  getAllClans() {
+    if (Platform.OS === 'web' || !this.db) {
+      const clans = this._getWebClans();
+      return Promise.resolve(clans);
+    }
+
+    return new Promise((resolve, reject) => {
+      this.db.transaction(tx => {
+        tx.executeSql(
+          `SELECT * FROM clans ORDER BY created_at DESC;`,
+          [],
+          (_, { rows }) => resolve(rows._array),
+          (_, err) => reject(err)
+        );
+      });
+    });
+  }
+
+  /**
+   * Adiciona um membro a um CLANN
+   * @param {number|string} clanId - ID do CLANN
+   * @param {string} totemId - ID do Totem
+   * @param {string} role - Papel do membro ('member', 'admin', 'founder')
+   * @returns {Promise<boolean>}
+   */
+  addMember(clanId, totemId, role = 'member') {
+    if (Platform.OS === 'web' || !this.db) {
+      const members = this._getWebMembers();
+      
+      // Verifica se já é membro
+      const alreadyMember = members.some(
+        m => m.clan_id === parseInt(clanId) && m.totem_id === totemId
+      );
+      
+      if (alreadyMember) {
+        return Promise.resolve(true);
+      }
+
+      // Adiciona como membro
+      members.push({
+        id: Date.now(),
+        clan_id: parseInt(clanId),
+        totem_id: totemId,
+        role: role,
+        joined_at: new Date().toISOString()
+      });
+      this._saveWebMembers(members);
+      return Promise.resolve(true);
+    }
+
+    return new Promise((resolve, reject) => {
+      this.db.transaction(tx => {
+        // Verifica se já é membro
+        tx.executeSql(
+          `SELECT * FROM clan_members WHERE clan_id = ? AND totem_id = ?;`,
+          [clanId, totemId],
+          (_, { rows }) => {
+            if (rows.length > 0) {
+              // Já é membro
+              resolve(true);
+            } else {
+              // Adiciona como membro
+              tx.executeSql(
+                `INSERT INTO clan_members (clan_id, totem_id, role, joined_at)
+                 VALUES (?, ?, ?, datetime('now'));`,
+                [clanId, totemId, role],
+                () => resolve(true),
+                (_, err) => reject(err)
+              );
+            }
+          },
+          (_, err) => reject(err)
+        );
+      });
+    });
+  }
+
+  /**
+   * Cria um CLANN a partir de um convite (sem fundador específico)
+   * @param {Object} clanData - Dados do CLANN { name, description, icon, privacy, external_clann_id }
+   * @param {string} totemId - ID do Totem que está entrando
+   * @returns {Promise<Object>} CLANN criado
+   */
+  createClanForInvite(clanData, totemId) {
+    if (Platform.OS === 'web' || !this.db) {
+      const invite = this._generateInviteCode();
+      const clanId = Date.now();
+      const now = new Date().toISOString();
+      
+      const newClan = {
+        id: clanId,
+        name: clanData.name,
+        icon: clanData.icon || '🏛️',
+        description: clanData.description || '',
+        invite_code: invite,
+        privacy: clanData.privacy || 'public',
+        created_at: now,
+        founder_totem: null, // Sem fundador específico (entrada via convite)
+        external_clann_id: clanData.external_clann_id // Armazena o clannId do Gateway
+      };
+
+      // Salva o CLANN
+      const clans = this._getWebClans();
+      clans.push(newClan);
+      this._saveWebClans(clans);
+
+      // Adiciona o primeiro membro
+      const members = this._getWebMembers();
+      members.push({
+        id: Date.now() + 1,
+        clan_id: clanId,
+        totem_id: totemId,
+        role: 'member',
+        joined_at: now
+      });
+      this._saveWebMembers(members);
+
+      return Promise.resolve({
+        id: clanId,
+        name: newClan.name,
+        icon: newClan.icon,
+        description: newClan.description,
+        invite_code: invite,
+        privacy: newClan.privacy,
+        external_clann_id: newClan.external_clann_id,
+        members: 1,
+        role: 'member'
+      });
+    }
+
+    const invite = this._generateInviteCode();
+
+    return new Promise((resolve, reject) => {
+      this.db.transaction(tx => {
+        tx.executeSql(
+          `INSERT INTO clans (name, icon, description, invite_code, privacy, created_at, founder_totem)
+           VALUES (?, ?, ?, ?, ?, datetime('now'), NULL);`,
+          [
+            clanData.name,
+            clanData.icon || '🏛️',
+            clanData.description || null,
+            invite,
+            clanData.privacy || 'public'
+          ],
+          (_, result) => {
+            const clanId = result.insertId;
+
+            // Adiciona o primeiro membro
+            tx.executeSql(
+              `INSERT INTO clan_members (clan_id, totem_id, role, joined_at)
+               VALUES (?, ?, 'member', datetime('now'));`,
+              [clanId, totemId],
+              () => {
+                // Tenta adicionar external_clann_id se a coluna existir
+                // (migração futura pode adicionar essa coluna)
+                tx.executeSql(
+                  `UPDATE clans SET external_clann_id = ? WHERE id = ?;`,
+                  [clanData.external_clann_id, clanId],
+                  () => {},
+                  () => {} // Ignora erro se coluna não existir
+                );
+
+                resolve({
+                  id: clanId,
+                  name: clanData.name,
+                  icon: clanData.icon || '🏛️',
+                  description: clanData.description || '',
+                  invite_code: invite,
+                  privacy: clanData.privacy || 'public',
+                  external_clann_id: clanData.external_clann_id,
+                  members: 1,
+                  role: 'member'
+                });
+              },
+              (_, err) => reject(err)
+            );
+          },
+          (_, error) => reject(error)
+        );
+      });
+    });
+  }
+
+  // ---------------------------------------------------------
   // Utilitário interno
   // ---------------------------------------------------------
   _generateInviteCode() {

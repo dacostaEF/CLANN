@@ -106,5 +106,90 @@ export default class ClanManager {
     // Em produção, usar ClanStorage.updateClan()
     return { success: true, clanId };
   }
+
+  /**
+   * DOSE 2: Entra em CLANN usando apenas clannId (do Gateway)
+   * 🔒 REGRA: Esta função deve funcionar APENAS com clannId
+   * 🔒 REGRA: NUNCA buscar dados do Gateway aqui
+   * 🔒 REGRA: Todas validações são locais
+   * 
+   * @param {string} clannId - ID do CLANN vindo do Gateway (ex: "clann_lab_secreto")
+   * @param {string} totemId - ID do Totem local
+   * @returns {Promise<Object>} CLANN criado/encontrado
+   */
+  static async joinClanByClannId(clannId, totemId) {
+    // 🔒 VALIDAÇÃO 1: clannId é obrigatório
+    if (!clannId || typeof clannId !== 'string') {
+      throw new Error('CLANN ID inválido');
+    }
+
+    // 🔒 VALIDAÇÃO 2: Verificar Totem LOCALMENTE
+    if (!totemId) {
+      throw new Error('Totem local não encontrado');
+    }
+
+    // ClanStorage é uma instância única exportada
+    // init() já foi chamado na inicialização do app, mas chamamos novamente para garantir
+    if (ClanStorage.init) {
+      await ClanStorage.init();
+    }
+
+    // 🔒 VALIDAÇÃO 3: Verificar se já é membro (local)
+    const userClans = await ClanStorage.getUserClans(totemId);
+    const existingClan = userClans.find(clan => {
+      // Verifica se o CLANN tem o clannId externo armazenado
+      return clan.external_clann_id === clannId || clan.clann_id === clannId;
+    });
+
+    if (existingClan) {
+      console.log('Já é membro deste CLANN');
+      return existingClan;
+    }
+
+    try {
+      // 1. Verificar se CLANN já existe localmente (por clannId externo)
+      const allClans = await ClanStorage.getAllClans();
+      let clan = allClans.find(c => {
+        return c.external_clann_id === clannId || c.clann_id === clannId;
+      });
+
+      if (!clan) {
+        // 2. Criar estrutura local para o CLANN (se não existe)
+        // Usa o clannId como nome temporário se não tiver nome
+        const clanData = {
+          name: `CLANN ${clannId.substring(0, 8)}`,
+          description: '',
+          icon: '🏛️',
+          privacy: 'public',
+          external_clann_id: clannId // Armazena o clannId do Gateway
+        };
+
+        // Cria o CLANN localmente (sem fundador específico, pois é entrada via convite)
+        clan = await ClanStorage.createClanForInvite(clanData, totemId);
+      }
+
+      // 3. Adicionar como membro (se ainda não for)
+      const isMember = userClans.some(uc => uc.id === clan.id);
+      if (!isMember) {
+        await ClanStorage.addMember(clan.id, totemId, 'member');
+        // Recarrega o CLANN para ter os dados atualizados
+        clan = await ClanStorage.getClanById(clan.id);
+      }
+
+      // 4. Registrar entrada localmente
+      await logSecurityEvent(SECURITY_EVENTS.MEMBER_JOINED, {
+        clanId: clan.id,
+        clanName: clan.name,
+        clannId: clannId
+      }, totemId);
+
+      console.log(`✅ Entrou no CLANN localmente: ${clannId} (ID local: ${clan.id})`);
+      return clan;
+
+    } catch (error) {
+      console.error('Erro na entrada local no CLANN:', error);
+      throw error;
+    }
+  }
 }
 
