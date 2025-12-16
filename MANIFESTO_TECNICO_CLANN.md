@@ -276,3 +276,4 @@ O CLANN nasceu diferente. Este manifesto protege essa diferença.
 **Fim do Manifesto Técnico do CLANN**
 
 
+

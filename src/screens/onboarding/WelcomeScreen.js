@@ -20,10 +20,12 @@ import { useNavigation } from '@react-navigation/native';
 import { useTotem } from '../../context/TotemContext';
 import ClanManager from '../../clans/ClanManager';
 import { getCurrentTotemId } from '../../crypto/totemStorage';
+import { generateTotem } from '../../crypto/totem';
+import { saveTotemSecure } from '../../storage/secureStore';
 
 export default function WelcomeScreen() {
   const navigation = useNavigation();
-  const { totem } = useTotem();
+  const { totem, setTotem } = useTotem();
   const [clannParams, setClannParams] = useState(null);
   const [status, setStatus] = useState('');
   const [processing, setProcessing] = useState(false);
@@ -116,6 +118,9 @@ export default function WelcomeScreen() {
    * DOSE 2: Entrada automática no CLANN via convite
    * 🔒 REGRA CRÍTICA: NUNCA buscar dados no Gateway aqui
    * 🔒 REGRA CRÍTICA: A entrada é com base APENAS nos dados do convite
+   * 
+   * IMPLEMENTAÇÃO: Criação automática de Totem para securityTier='free'
+   * Preserva soberania local e elimina loops de onboarding
    */
   const handleAutoJoin = async (clannData) => {
     setProcessing(true);
@@ -123,37 +128,62 @@ export default function WelcomeScreen() {
     
     try {
       // 1. PRIMEIRO: Verificar Totem local
-      const totemId = await getCurrentTotemId();
+      let totemId = await getCurrentTotemId();
       
       if (!totemId) {
-        // Se não tem Totem, precisa criar primeiro
-        setStatus('Criando Totem...');
-        // Navegar para criação de Totem, mas guardar clannData para depois
-        // Por enquanto, vamos apenas mostrar que precisa criar Totem
-        Alert.alert(
-          'Totem Necessário',
-          'Você precisa criar um Totem primeiro para entrar no CLANN.',
-          [
-            {
-              text: 'Criar Totem',
-              onPress: () => {
-                // Guardar clannData em algum lugar para usar depois
-                // Por enquanto, navegar para criação
-                navigation.navigate('TotemGeneration', { pendingClann: clannData });
+        // 2. DECISÃO: Criar Totem automaticamente apenas para securityTier='free'
+        if (clannData.securityTier === 'free') {
+          // Criação automática de Totem (padrão do TotemGenerationScreen)
+          setStatus('Criando Totem...');
+          
+          try {
+            console.log('[WelcomeScreen] Criando Totem automaticamente para securityTier=free');
+            const newTotem = generateTotem();
+            console.log('[WelcomeScreen] Totem gerado:', newTotem);
+            
+            // Persistir Totem no secureStore
+            await saveTotemSecure(newTotem);
+            console.log('[WelcomeScreen] Totem salvo com sucesso');
+            
+            // Atualizar estado global via TotemContext
+            await setTotem(newTotem);
+            
+            // Obter totemId do Totem criado
+            totemId = newTotem.totemId;
+            console.log('[WelcomeScreen] Totem criado e injetado no context. ID:', totemId);
+            
+            setStatus('Totem criado. Entrando no CLANN...');
+          } catch (error) {
+            console.error('[WelcomeScreen] Erro ao criar Totem automaticamente:', error);
+            throw new Error(`Falha ao criar Totem: ${error.message}`);
+          }
+        } else {
+          // Para securityTier !== 'free', manter comportamento de onboarding manual
+          setStatus('');
+          setProcessing(false);
+          Alert.alert(
+            'Totem Necessário',
+            'Você precisa criar um Totem primeiro para entrar neste CLANN.',
+            [
+              {
+                text: 'Criar Totem',
+                onPress: () => {
+                  navigation.navigate('TotemGeneration', { pendingClann: clannData });
+                }
+              },
+              {
+                text: 'Cancelar',
+                style: 'cancel',
+                onPress: () => {
+                  setClannParams(null);
+                  setStatus('');
+                  setProcessing(false);
+                }
               }
-            },
-            {
-              text: 'Cancelar',
-              style: 'cancel',
-              onPress: () => {
-                setClannParams(null);
-                setStatus('');
-                setProcessing(false);
-              }
-            }
-          ]
-        );
-        return;
+            ]
+          );
+          return;
+        }
       }
 
       // 2. DEPOIS: Chamar lógica de entrada EXISTENTE

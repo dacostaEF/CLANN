@@ -30,7 +30,7 @@ const inviteDatabase = {
     clanName: 'Laboratório CLANN',
     objective: 'Testar soberania digital',
     securityTier: 'free',
-    expiresAt: '2024-12-31T23:59:59Z'
+    expiresAt: '2099-12-31T23:59:59Z'
   },
   'TEST01': {
     clannId: 'clann_teste_01',

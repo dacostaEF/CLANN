@@ -33,3 +33,4 @@ Esta página é independente do app CLANN principal. Ela apenas:
 3. Redireciona para o app principal com o `clannId`
 
 
+
