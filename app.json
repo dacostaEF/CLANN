@@ -26,6 +26,7 @@
       "package": "com.cla.app"
     },
     "web": {
+      "favicon": "./LogoClann_favicon.png"
     },
     "plugins": {
       "expo-camera": {

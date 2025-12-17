@@ -19,6 +19,9 @@ import EnterPinScreen from './src/screens/EnterPinScreen';
 // Autocheck
 import AuthCheckScreen from './src/screens/AuthCheckScreen';
 
+// Gate Page
+import GatePageScreen from './src/screens/GatePageScreen';
+
 // Telas CLANN
 import ClanListScreen from './src/screens/ClanListScreen';
 import CreateClanScreen from './src/screens/CreateClanScreen';
@@ -142,6 +145,9 @@ function AppNavigator() {
         
         {/* Decisão automática de fluxo */}
         <Stack.Screen name="AuthCheck" component={AuthCheckScreen} />
+
+        {/* Gate Page - Orientação para visitantes sem convite */}
+        <Stack.Screen name="GatePage" component={GatePageScreen} />
 
         {/* Onboarding */}
         <Stack.Screen name="Welcome" component={WelcomeScreen} />
