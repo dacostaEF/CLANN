@@ -8,8 +8,6 @@
     "ios": "expo start --ios",
     "web": "expo start --web --offline",
     "web:clear": "expo start --web --offline --clear",
-    "build": "npx @expo/cli export --platform web",
-    "build:web": "npx @expo/cli export --platform web",
     "test": "jest"
   },
   "dependencies": {
