@@ -8,6 +8,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web --offline",
     "web:clear": "expo start --web --offline --clear",
+    "build": "expo export:web",
     "test": "jest"
   },
   "dependencies": {
